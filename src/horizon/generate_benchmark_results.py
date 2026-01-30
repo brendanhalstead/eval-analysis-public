@@ -42,7 +42,10 @@ import pandas as pd
 import yaml
 
 from horizon.compute_trendline_ci import get_sota_agents
-from horizon.plot.bootstrap_ci import DoublingTimeStats, compute_bootstrap_confidence_region
+from horizon.plot.bootstrap_ci import (
+    DoublingTimeStats,
+    compute_bootstrap_confidence_region,
+)
 
 
 def defaultdict_to_dict(d: defaultdict | dict) -> dict:  # type: ignore
@@ -124,6 +127,8 @@ def generate_benchmark_metrics(
     swaa_version: str,
     logger: logging.Logger,
     include_transcript_links: bool = False,
+    benchmark_results_to_stitch: dict[str, Any] | None = None,
+    model_names_to_stitch: list[str] | None = None,
 ) -> dict[str, Any]:
     results = dict()
     dated_results = defaultdict(set)
@@ -189,12 +194,33 @@ def generate_benchmark_metrics(
         results[model]["metrics"] = agent_result
         results[model]["release_date"] = release_dates[agent]
         results[model]["scaffolds"] = list(agent_df["scaffold"].unique())
+        results[model]["benchmark_name"] = benchmark_name
         dated_results[release_dates[agent]].add(
             (
                 model,
                 agent_result["p50_horizon_length"]["estimate"],
             )
         )
+
+    if benchmark_results_to_stitch:
+        assert (
+            model_names_to_stitch
+        ), "model_names_to_stitch is required when stitching benchmark results"
+        old_results = benchmark_results_to_stitch.get("results", {})
+        for model_name in model_names_to_stitch:
+            assert (
+                model_name in old_results
+            ), f"Model {model_name} not found in benchmark results to stitch"
+            assert (
+                model_name not in results
+            ), f"Model {model_name} already exists in current results"
+            results[model_name] = old_results[model_name].copy()
+            dated_results[results[model_name]["release_date"]].add(
+                (
+                    model_name,
+                    results[model_name]["metrics"]["p50_horizon_length"]["estimate"],
+                )
+            )
 
     highest_horizon_so_far = float("-inf")
     for release_date, results_on_date in sorted(dated_results.items()):
@@ -229,9 +255,11 @@ def main(
     release_dates_file: pathlib.Path,
     output_metrics_file: pathlib.Path,
     include_transcript_links: bool,
-    benchmark_name: str | None = None,
-    benchmark_long_tasks_version: str | None = None,
-    benchmark_swaa_version: str | None = None,
+    benchmark_name: str,
+    benchmark_long_tasks_version: str,
+    benchmark_swaa_version: str,
+    benchmark_results_to_stitch: pathlib.Path | None = None,
+    model_names_to_stitch: list[str] | None = None,
 ) -> None:
     df_runs = pd.read_json(runs_file, lines=True, orient="records", convert_dates=False)
     assert "scaffold" in df_runs.columns, "scaffold column is required"
@@ -242,17 +270,11 @@ def main(
 
     df_bootstrap_results = pd.read_csv(bootstrap_results_file)
 
-    output_metrics_file.parent.mkdir(parents=True, exist_ok=True)
+    old_benchmark_results = None
+    if benchmark_results_to_stitch:
+        old_benchmark_results = yaml.safe_load(benchmark_results_to_stitch.read_text())
 
-    # Use CLI arguments if provided, otherwise use defaults
-    BENCHMARK_NAME = benchmark_name or "METR-Horizon-v1"
-    # Commit hashes for the task manifest files
-    BENCHMARK_LONG_TASKS_VERSION = (
-        benchmark_long_tasks_version or "2ce7f1e0c4f8b7f2653e7014941a1a9f3ca908e2"
-    )
-    BENCHMARK_SWAA_VERSION = (
-        benchmark_swaa_version or "3d2ab4f0662a752409858a73e006af35e3fb7d64"
-    )
+    output_metrics_file.parent.mkdir(parents=True, exist_ok=True)
 
     logging.basicConfig(
         level="INFO",
@@ -265,11 +287,13 @@ def main(
         df_agent_summaries,
         df_bootstrap_results,
         release_dates,
-        BENCHMARK_NAME,
-        BENCHMARK_LONG_TASKS_VERSION,
-        BENCHMARK_SWAA_VERSION,
+        benchmark_name,
+        benchmark_long_tasks_version,
+        benchmark_swaa_version,
         logger,
         include_transcript_links=include_transcript_links,
+        benchmark_results_to_stitch=old_benchmark_results,
+        model_names_to_stitch=model_names_to_stitch,
     )
 
     with open(output_metrics_file, "w") as f:
@@ -315,22 +339,40 @@ if __name__ == "__main__":
     parser.add_argument(
         "--benchmark-name",
         type=str,
-        default=None,
-        help="Benchmark name (e.g., METR-Horizon-v1.0)",
+        required=True,
+        help="Benchmark name (e.g., METR-Horizon-v1)",
     )
     parser.add_argument(
         "--benchmark-long-tasks-version",
         type=str,
-        default=None,
-        help="Commit hash for long tasks manifest",
+        required=True,
+        help="Commit hash for the long tasks manifest file",
     )
     parser.add_argument(
         "--benchmark-swaa-version",
         type=str,
+        required=True,
+        help="Commit hash for the SWAA manifest file",
+    )
+    parser.add_argument(
+        "--benchmark-results-to-stitch",
+        type=pathlib.Path,
         default=None,
-        help="Commit hash for SWAA manifest",
+        help="Optional path to benchmark_results.yaml to stitch models from",
+    )
+    parser.add_argument(
+        "--model-names-to-stitch",
+        type=str,
+        default=None,
+        help="Comma-separated list of model names to stitch from the old benchmark",
     )
     args = parser.parse_args()
+
+    model_names_to_stitch = None
+    if args.model_names_to_stitch:
+        model_names_to_stitch = [
+            name.strip() for name in args.model_names_to_stitch.split(",")
+        ]
 
     main(
         runs_file=args.runs_file,
@@ -342,4 +384,6 @@ if __name__ == "__main__":
         benchmark_name=args.benchmark_name,
         benchmark_long_tasks_version=args.benchmark_long_tasks_version,
         benchmark_swaa_version=args.benchmark_swaa_version,
+        benchmark_results_to_stitch=args.benchmark_results_to_stitch,
+        model_names_to_stitch=model_names_to_stitch,
     )
