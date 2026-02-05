@@ -97,14 +97,44 @@ The bootstrap resamples **tasks**, not models. Within each bootstrap iteration:
 
 Since steps 1-2 are shared, when a bootstrap iteration over-samples "easy" tasks, **all models benefit simultaneously**.
 
-### 4.2 Empirical Correlation
+### 4.2 Key Finding: Correlation Driven by Capability Similarity, NOT Lab
 
-| Model Pair | Correlation |
-|------------|-------------|
-| Claude Opus 4.5 vs GPT-5 | 0.81 |
-| GPT-4 0314 vs Claude 3 Opus | 0.77 |
-| o3 vs GPT-5 | 0.71 |
-| Mean (all pairs) | 0.36 |
+The correlation structure has a clear pattern:
+
+| Metric | Value |
+|--------|-------|
+| Correlation with \|log(h₁) - log(h₂)\| | **r = -0.82** |
+| Within same lab | mean r = 0.39 |
+| Between different labs | mean r = 0.34 |
+| Within capability tier | mean r = 0.58 |
+| Cross capability tiers | mean r = 0.30 |
+
+**The correlation is entirely explained by capability similarity**, not lab identity. Models at similar capability levels have similar "decision boundaries" — tasks they sometimes pass, sometimes fail. They're affected by the same task resampling, so their errors are correlated.
+
+### 4.3 Correlation Matrix
+
+![Correlation Matrix](correlation_matrix.png)
+
+The block-diagonal structure (when sorted by horizon) shows that correlation clusters by capability tier:
+- **Low-capability cluster** (GPT-4 variants, Claude 3 Opus): r ≈ 0.7-0.8
+- **Mid-capability cluster** (Sonnet 3.5, o1-preview): r ≈ 0.5-0.7
+- **Frontier cluster** (o3, GPT-5, Opus 4.5): r ≈ 0.6-0.8
+
+### 4.4 Highest and Lowest Correlations
+
+**Highest** (similar capability):
+| Pair | Correlation |
+|------|-------------|
+| Claude Opus 4.5 ↔ GPT-5 | 0.81 |
+| Claude 3 Opus ↔ GPT-4 1106 | 0.80 |
+| Claude 3 Opus ↔ GPT-4 0314 | 0.77 |
+
+**Lowest** (different capability):
+| Pair | Correlation |
+|------|-------------|
+| Claude Opus 4.5 ↔ GPT-4o | 0.05 |
+| Claude 3.5 Sonnet (Old) ↔ Claude Opus 4.5 | 0.06 |
+| Claude 3 Opus ↔ GPT-5 | 0.07 |
 
 **42% of bootstrap iterations** have ≥12/15 models on the same side of their medians (vs 7% expected under independence).
 
