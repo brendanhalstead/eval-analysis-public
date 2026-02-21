@@ -1,26 +1,30 @@
 """
-Analyze the shape of bootstrap distributions for p50 time horizons.
+Analyze the shape of bootstrap distributions for time horizons.
 This script generates bootstrap samples and examines their distributional properties
 to inform the choice of likelihood function in a Bayesian model.
+
+Usage:
+    python analyze_bootstrap_shapes.py [--success-percent 50] [--n-bootstrap 1000]
 """
 
 import sys
 sys.path.insert(0, 'src')
 
+import argparse
 import numpy as np
 import pandas as pd
 from scipy import stats
-from scipy.stats import shapiro, normaltest, skew, kurtosis
+from scipy.stats import shapiro, skew, kurtosis
 import warnings
 warnings.filterwarnings('ignore')
 
 from horizon.utils.logistic import get_x_for_quantile, logistic_regression
 
-# Configuration
-N_BOOTSTRAP = 1000  # Full bootstrap for proper analysis
-REGULARIZATION = 0.1
-WEIGHTING = 'invsqrt_task_weight'
-SUCCESS_PERCENT = 50
+# Default configuration
+DEFAULT_N_BOOTSTRAP = 1000
+DEFAULT_REGULARIZATION = 0.1
+DEFAULT_WEIGHTING = 'invsqrt_task_weight'
+DEFAULT_SUCCESS_PERCENT = 50
 
 
 def bootstrap_sample(data, categories, rng):
@@ -90,7 +94,7 @@ def run_bootstrap(data, agents, n_bootstrap, categories):
                 results[agent].append(np.nan)
                 continue
 
-            horizon = compute_horizon(agent_data, WEIGHTING, REGULARIZATION, SUCCESS_PERCENT)
+            horizon = compute_horizon(agent_data, DEFAULT_WEIGHTING, DEFAULT_REGULARIZATION, SUCCESS_PERCENT)
             results[agent].append(horizon)
 
     return {agent: np.array(vals) for agent, vals in results.items()}
@@ -180,7 +184,56 @@ def analyze_distribution(samples, agent_name):
     }
 
 
-def main():
+def compute_correlation_matrix(samples_df):
+    """Compute correlation matrix of log-space residuals."""
+    log_residuals = {}
+    medians = {}
+
+    for col in samples_df.columns:
+        s = samples_df[col].dropna().values
+        if len(s) < 50:
+            continue
+        log_s = np.log(s)
+        log_residuals[col] = log_s - np.median(log_s)
+        medians[col] = np.exp(np.median(log_s))
+
+    models = list(log_residuals.keys())
+    n = len(models)
+    corr_matrix = np.zeros((n, n))
+
+    for i, m1 in enumerate(models):
+        for j, m2 in enumerate(models):
+            min_len = min(len(log_residuals[m1]), len(log_residuals[m2]))
+            corr_matrix[i, j] = np.corrcoef(
+                log_residuals[m1][:min_len],
+                log_residuals[m2][:min_len]
+            )[0, 1]
+
+    # Create DataFrame with short names
+    short_names = [m.replace(' (Inspect)', '') for m in models]
+    corr_df = pd.DataFrame(corr_matrix, index=short_names, columns=short_names)
+
+    # Sort by median horizon
+    model_medians = [medians[m] for m in models]
+    sort_idx = np.argsort(model_medians)
+    sorted_names = [short_names[i] for i in sort_idx]
+    corr_df_sorted = corr_df.loc[sorted_names, sorted_names]
+
+    return corr_df_sorted, medians
+
+
+def main(success_percent=DEFAULT_SUCCESS_PERCENT, n_bootstrap=DEFAULT_N_BOOTSTRAP):
+    """Main analysis function.
+
+    Args:
+        success_percent: Target success rate (50 or 80)
+        n_bootstrap: Number of bootstrap iterations
+    """
+    global SUCCESS_PERCENT
+    SUCCESS_PERCENT = success_percent
+
+    suffix = '' if success_percent == 50 else f'_p{success_percent}'
+
     # Load data
     print("Loading data...")
     data = pd.read_json('reports/time-horizon-1-1/data/raw/runs.jsonl', lines=True)
@@ -193,7 +246,7 @@ def main():
 
     # Run bootstrap
     categories = ['task_family', 'task_id', 'run_id']
-    bootstrap_results = run_bootstrap(data, agents, N_BOOTSTRAP, categories)
+    bootstrap_results = run_bootstrap(data, agents, n_bootstrap, categories)
 
     # Analyze distributions
     print("\n" + "="*80)
@@ -262,13 +315,41 @@ def main():
 
     # Save bootstrap samples for further analysis
     print("\n" + "="*80)
-    print("Saving bootstrap samples to bootstrap_samples.csv...")
     samples_df = pd.DataFrame(bootstrap_results)
-    samples_df.to_csv('bootstrap_samples.csv', index=False)
-    print("Done!")
+    samples_file = f'bootstrap_samples{suffix}.csv'
+    print(f"Saving bootstrap samples to {samples_file}...")
+    samples_df.to_csv(samples_file, index=False)
 
-    return analyses, bootstrap_results
+    # Compute and save correlation matrix
+    corr_df, medians = compute_correlation_matrix(samples_df)
+    corr_file = f'correlation_matrix{suffix}.csv'
+    print(f"Saving correlation matrix to {corr_file}...")
+    corr_df.to_csv(corr_file)
+
+    print("\nModels sorted by horizon:")
+    for name in corr_df.index:
+        # Find original name with (Inspect) suffix
+        orig_name = name if name in medians else f"{name} (Inspect)"
+        if orig_name in medians:
+            print(f"  {name:<40} {medians[orig_name]:>10.1f} min")
+
+    print("\nDone!")
+
+    return analyses, bootstrap_results, corr_df
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(description='Analyze bootstrap distribution shapes')
+    parser.add_argument('--success-percent', type=int, default=DEFAULT_SUCCESS_PERCENT,
+                        help='Target success percentage (default: 50)')
+    parser.add_argument('--n-bootstrap', type=int, default=DEFAULT_N_BOOTSTRAP,
+                        help='Number of bootstrap iterations (default: 1000)')
+    return parser.parse_args()
 
 
 if __name__ == '__main__':
-    analyses, bootstrap_results = main()
+    args = parse_args()
+    analyses, bootstrap_results, corr_df = main(
+        success_percent=args.success_percent,
+        n_bootstrap=args.n_bootstrap
+    )

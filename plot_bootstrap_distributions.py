@@ -52,12 +52,29 @@ point_estimates = compute_point_estimates(data)
 samples_df = pd.read_csv('bootstrap_samples.csv')
 
 # Select representative models (low, medium, high horizon)
+# Dynamically select based on available models
+available_models = samples_df.columns.tolist()
+
+# Define preferred models for each tier (in order of preference)
+low_tier = ['GPT-4 0314', 'GPT-4 Turbo (Inspect)', 'Claude 3 Opus (Inspect)']
+mid_tier = ['Claude 3.5 Sonnet (New) (Inspect)', 'o1-preview', 'o1 (Inspect)']
+high_tier = ['o3 (Inspect)', 'GPT-5 (Inspect)', 'Claude 4 Opus (Inspect)']
+frontier_tier = ['GPT-5.2', 'Claude Opus 4.5 (Inspect)', 'GPT-5.1-Codex-Max (Inspect)', 'Gemini 3 Pro']
+
+def pick_model(candidates, available):
+    for m in candidates:
+        if m in available:
+            return m
+    return None
+
 models_to_plot = [
-    'GPT-4 0314',  # Low horizon
-    'Claude 3.5 Sonnet (New) (Inspect)',  # Medium horizon
-    'o3 (Inspect)',  # High horizon
-    'Claude Opus 4.5 (Inspect)',  # Highest horizon
+    pick_model(low_tier, available_models),
+    pick_model(mid_tier, available_models),
+    pick_model(high_tier, available_models),
+    pick_model(frontier_tier, available_models),
 ]
+models_to_plot = [m for m in models_to_plot if m is not None]
+print(f"Plotting models: {models_to_plot}")
 
 fig, axes = plt.subplots(2, 4, figsize=(16, 8))
 
