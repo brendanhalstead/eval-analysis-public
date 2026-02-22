@@ -231,22 +231,59 @@ The models differ in structure — hierarchy, link function, parameterization
 of how task difficulty affects agent success.  They need not share the same
 internal architecture.  They need only predict the same observations.
 
+Every model that uses a given parameter gives it the same prior.  To avoid
+repetition, here is the shared prior block that models inherit from:
+
+```
+# --- Shared honest priors (all models that use these parameters) ---
+
+# Human observation noise
+σ_human:     p(σ) ∝ 1/σ             [structural — Jeffreys]
+             PyMC: log_σ_human = pm.Flat(); σ_human = pt.exp(log_σ_human)
+
+# Expert estimate noise
+σ_estimate:  p(σ) ∝ 1/σ             [structural — Jeffreys]
+             PyMC: log_σ_est = pm.Flat(); σ_estimate = pt.exp(log_σ_est)
+
+# Agent intercept
+α_a:         Normal(0, 25)           [structural/symmetry + order-of-magnitude]
+             PyMC: pm.Normal("alpha", mu=0, sigma=5, dims="agent")
+
+# Agent slope
+β_a:         flat on (-∞, 0]         [structural — sign only]
+             PyMC: pm.Uniform("beta", lower=-50, upper=0, dims="agent")
+
+# Human observation model (for tasks with baselines)
+log₂(duration_ij) ~ Normal(μ_task_i, σ_human)
+
+# Expert estimate model (for tasks without baselines)
+log₂(estimate_i) ~ Normal(μ_task_i, σ_estimate)
+```
+
+Models below show ONLY what they add or change relative to this block.
+
 
 ### M0: Hierarchical, additive residual (current model)
 
 ```
-η_ai = α_a + β_a · μ_task_i + ε_i
-P(success) = logistic(η_ai)
-score_ai ~ Bernoulli(P)
+# Task difficulty hierarchy
+μ_global    ~ Normal(6, 9)           [order-of-magnitude — task design range]
+σ_global    ~ p(σ) ∝ 1/σ            [structural — Jeffreys]
+μ_family_f  ~ Normal(μ_global, σ_global)
+σ_family    ~ p(σ) ∝ 1/σ            [structural — Jeffreys]
+μ_task_i    ~ Normal(μ_family[f(i)], σ_family)
 
-ε_i ~ Normal(0, σ_ε)        # AI-specific task residual
-σ_ε ~ p(σ) ∝ 1/σ           # Jeffreys — no external basis for E[σ_ε]
+# Agent success model
+σ_ε ~ p(σ) ∝ 1/σ                    [structural — Jeffreys]
+ε_i ~ Normal(0, σ_ε)                # AI-specific task residual
+
+η_ai = α_a + β_a · μ_task_i + ε_i
+score_ai ~ Bernoulli(logistic(η_ai))
 ```
 
-This is the current hierarchical model with honest priors.  The additive
-ε_i captures "AI-specific difficulty" — a
-task that's harder (or easier) for AI than its human time would predict.
-The same ε_i applies to ALL agents.
+The additive ε_i captures "AI-specific difficulty" — a task that's harder
+(or easier) for AI than its human time would predict.  The same ε_i
+applies to ALL agents.
 
 **Parameter count (model-specific)**: 1 per task (ε_i) + 1 (σ_ε) = n_tasks + 1.
 
@@ -359,20 +396,22 @@ where δ captures systematic bias in expert time estimates.
 
 **Derivation of prior for δ**:
 
-What we know: δ is a location parameter (bias in log₂ space).  A positive δ
-means experts overestimate difficulty (pessimistic); negative means they
-underestimate (optimistic / planning fallacy).  We don't know the sign.
+What we know: δ is a location parameter (bias in log₂ space)
+**[structural]**.  A positive δ means experts overestimate difficulty
+(pessimistic); negative means they underestimate (optimistic / planning
+fallacy).  We don't know the sign **[structural — symmetry]**.
 
-If we claim E[δ] = 0 and SD[δ] ≈ 1 (a factor-of-2 bias in either direction
-is plausible):
+We don't have an external estimate of the magnitude of expert bias for
+this type of task.  The planning fallacy literature exists but covers
+different settings (personal time estimates, not expert estimates of
+novel software tasks).  So: **no defensible moment constraint**.
 
-MaxEnt on ℝ: **Normal(0, 1)**.
+**Honest prior**: Flat (improper) on ℝ.  Since δ is identifiable from
+tasks that have both baselines and estimates, the posterior will be proper.
 
-If we claim only E[δ] = 0 with no variance constraint: the MaxEnt
-distribution is improper (flat).  Since δ is identifiable from the ~30+ tasks
-that have both baselines and estimates, a flat prior is actually usable here
-— the posterior will be proper.  But Normal(0, 1) is safer and still weakly
-informative.
+**If you want a proper prior**: Normal(0, σ²) with σ large enough to be
+negligible (e.g., σ = 5 covers biases up to a factor of 32× in either
+direction).  Call this computational convenience, not a knowledge claim.
 
 **Parameter count**: 1 (δ is shared across all estimate-only tasks).
 
@@ -456,38 +495,46 @@ of observable features:
 ```
 # Task difficulty as regression
 μ_task_i = γ_0 + γ_source · x_source_i + γ_family · x_family_i + ν_i
-ν_i ~ Normal(0, σ_ν)          # residual
+ν_i ~ Normal(0, σ_ν)
 
 # Priors
-γ_0 ~ Normal(6, 9)            # intercept (same as μ_global)
-γ_source ~ Normal(0, 4)       # MaxEnt, E = 0, rough scale
-γ_family ~ Normal(0, 4)       # MaxEnt, E = 0, rough scale
-σ_ν ~ Exponential(1/2)
+γ_0 ~ Normal(6, 9)            [order-of-magnitude — task design range, same as μ_global]
+γ_source ~ Normal(0, σ_γ²)    [structural/symmetry — E = 0, no directional belief]
+γ_family ~ Normal(0, σ_γ²)    [structural/symmetry — E = 0, no directional belief]
+σ_γ ~ p(σ) ∝ 1/σ             [structural — Jeffreys; let data determine coeff scale]
+σ_ν ~ p(σ) ∝ 1/σ             [structural — Jeffreys]
 ```
 
 where x_source and x_family are encoded task features (one-hot or similar).
 This tests whether the hierarchy's family structure is better captured by
 explicit features than by random effects.
 
-The regression coefficients γ get Normal(0, σ²) priors — MaxEnt given
-mean zero (no prior directional belief) and a rough variance.
+The regression coefficients γ get Normal(0, σ_γ²) with a shared
+hyperprior on σ_γ.  E[γ] = 0 is defensible by symmetry
+**[structural]** — we have no reason to expect any source or family to
+be systematically harder before seeing data.  The scale σ_γ gets a
+Jeffreys prior rather than a fixed value, because we have no external
+basis for how large the effects are.
 
 
 ### M8: IRT-style scalar ability (Moss's approach, joint version)
 
 Replace the per-agent (α, β) with a single scalar ability θ_a, and put
-per-task discrimination on the task side:
+per-task discrimination on the task side.  This model does NOT inherit
+the shared α_a / β_a priors — it replaces them entirely.
 
 ```
-# Task difficulty hierarchy (same as M0)
-μ_task_i ~ [hierarchical or flat]
+# Task difficulty hierarchy (same as M0, or flat as in M6)
+μ_task_i ~ [hierarchical or flat — pick one and hold fixed for comparison]
 
 # Agent ability — single scalar
 θ_a ~ Normal(0, σ_θ)
-σ_θ ~ Exponential(1)
+σ_θ ~ p(σ) ∝ 1/σ            [structural — Jeffreys; let data set the ability scale]
 
 # Per-task discrimination
-a_i ~ Exponential(1)
+a_i ~ Exponential(1)          [structural — E[a] = 1 is a scale convention]
+
+# Observation models for human durations and estimates: same shared block
 
 η_ai = a_i · (θ_a − μ_task_i)
 score_ai ~ Bernoulli(logistic(η_ai))
@@ -500,17 +547,21 @@ per agent (1 parameter vs. 2) but can't express "good at easy tasks, bad
 at hard ones" vs. "mediocre everywhere" — all agents with the same θ
 behave identically.
 
-**Prior for θ_a**: Normal(0, σ_θ) with σ_θ ~ Exponential(1).  The
-hierarchical prior on θ lets the data determine the spread of abilities.
-MaxEnt for the hyperprior: we know σ_θ > 0 and have a rough expected
-value of ~1 (abilities spread over a few units on the logit scale).
+**Prior for θ_a**: Normal(0, σ_θ) with σ_θ ~ Jeffreys.  E[θ] = 0 is a
+location convention **[structural]** — the absolute scale is absorbed by
+μ_task.  We have no external knowledge of how spread out agent abilities
+are, so σ_θ gets Jeffreys rather than a fixed value.
+
+**Prior for a_i**: Exponential(1).  E[a] = 1 is a scale convention
+**[structural]** — it fixes the units of the θ–μ_task difference.
+This is not data-derived; any positive mean would work, but 1 is the
+natural choice.
 
 **This model cannot be compared by sharing α/β priors with M0**, because
 the parameters are structurally different.  The comparison is purely through
-the marginal likelihood.  This is fine — two models with different
-parameterizations but the same observables are compared through how well
-each predicts the data, weighted by how much prior mass each wastes on
-regions of parameter space the data don't support.
+the marginal likelihood — how well each model predicts the data, weighted by
+how much prior mass each wastes on regions of parameter space the data
+don't support.
 
 
 ## 3. Which comparisons to actually run
