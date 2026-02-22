@@ -62,6 +62,39 @@ stages:
           cache: false
       desc: Fit logistic curves for each agent, load bootstrap results from bootstrap
         stage, and add binned weighted success rate data.
+  wrangle_hierarchical_bayesian:
+    foreach: *id001
+    do:
+      cmd: python -m horizon.wrangle.bayesian hierarchical --fig-name ${key} --runs-file
+        ${item.runs_file} --output-logistic-fits-file data/wrangled/hierarchical_bayesian/${key}.csv
+        --release-dates ../../data/external/release_dates.yaml --output-metrics-file
+        metrics/hierarchical_bayesian/${key}.yaml --output-task-difficulty-file data/wrangled/hierarchical_bayesian/${key}_task_difficulty.csv
+        --output-hyperparams-file metrics/hierarchical_bayesian/${key}_hyperparams.yaml
+        --output-diagnostics-file metrics/hierarchical_bayesian/${key}_diagnostics.yaml
+        --n-samples ${hierarchical_bayesian.n_samples} --n-tune ${hierarchical_bayesian.n_tune}
+        --n-chains ${hierarchical_bayesian.n_chains} --target-accept ${hierarchical_bayesian.target_accept}
+        --random-seed ${hierarchical_bayesian.random_seed} -v
+      deps:
+      - ${item.runs_file}
+      - ../../data/external/release_dates.yaml
+      - ${code_dir}/horizon/wrangle/bayesian.py
+      - ${code_dir}/horizon/utils/bayesian_hierarchical.py
+      params:
+      - fig_params/figs.yaml:
+        - figs.wrangle_logistic.${key}
+      - hierarchical_bayesian
+      outs:
+      - data/wrangled/hierarchical_bayesian/${key}.csv
+      - data/wrangled/hierarchical_bayesian/${key}_task_difficulty.csv
+      metrics:
+      - metrics/hierarchical_bayesian/${key}.yaml:
+          cache: false
+      - metrics/hierarchical_bayesian/${key}_hyperparams.yaml:
+          cache: false
+      - metrics/hierarchical_bayesian/${key}_diagnostics.yaml:
+          cache: false
+      desc: Fit hierarchical Bayesian logistic model with task-level difficulty estimation
+        and MCMC diagnostics.
   plot_individual_histograms:
     foreach: ${figs.plot_individual_histograms}
     do:

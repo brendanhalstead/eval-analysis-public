@@ -2,6 +2,13 @@ log_level: INFO
 n_bootstrap: 1_000
 plot_format: png
 
+hierarchical_bayesian:
+  n_samples: 1000
+  n_tune: 1000
+  n_chains: 2
+  target_accept: 0.9
+  random_seed: 42
+
 benchmark:
   name: METR-Horizon-v1.1
   # mp4-tasks commit
