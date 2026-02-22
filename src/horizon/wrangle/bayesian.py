@@ -605,7 +605,7 @@ def _save_diagnostics(idata: Any, output_file: pathlib.Path) -> None:
 
     summary = az.summary(
         idata,
-        var_names=["alpha", "beta", "mu_global", "sigma_global", "sigma_family"],
+        var_names=["alpha", "beta", "mu_global", "sigma_global", "sigma_family", "sigma_epsilon"],
         round_to=4,
     )
 

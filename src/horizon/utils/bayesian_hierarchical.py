@@ -81,6 +81,9 @@ class HierarchicalPrior:
     beta_std: float = 1.5
     beta_upper: float = 0.0
 
+    # Task-level residual (AI-specific deviation from human-time prediction)
+    sigma_epsilon_scale: float = 1.5
+
 
 @dataclass
 class HierarchicalData:
@@ -217,7 +220,21 @@ def build_hierarchical_model(
             dims="agent",
         )
 
-        eta = alpha[data.agent_agent_idx] + beta[data.agent_agent_idx] * mu_task[data.agent_task_idx]
+        # Task-level residual: captures AI-specific difficulty not
+        # predicted by human time (e.g. tasks with identical human
+        # durations but different AI success rates).
+        sigma_epsilon = pm.HalfNormal(
+            "sigma_epsilon", sigma=prior.sigma_epsilon_scale
+        )
+        epsilon = pm.Normal(
+            "epsilon", mu=0, sigma=sigma_epsilon, dims="task"
+        )
+
+        eta = (
+            alpha[data.agent_agent_idx]
+            + beta[data.agent_agent_idx] * mu_task[data.agent_task_idx]
+            + epsilon[data.agent_task_idx]
+        )
         p_success = pm.math.sigmoid(eta)
 
         pm.Bernoulli(
@@ -378,7 +395,7 @@ def extract_hyperparameter_summary(idata: Any) -> dict[str, dict[str, float]]:
 
     for name in [
         "mu_global", "sigma_global", "sigma_family",
-        "sigma_human", "sigma_estimate",
+        "sigma_human", "sigma_estimate", "sigma_epsilon",
     ]:
         if name in posterior:
             samples = posterior[name].values.ravel()
@@ -406,6 +423,7 @@ def compute_bce_from_posterior(
     alpha_mean = posterior["alpha"].values.reshape(-1, data.n_agents).mean(axis=0)
     beta_mean = posterior["beta"].values.reshape(-1, data.n_agents).mean(axis=0)
     mu_task_mean = posterior["mu_task"].values.reshape(-1, data.n_tasks).mean(axis=0)
+    epsilon_mean = posterior["epsilon"].values.reshape(-1, data.n_tasks).mean(axis=0)
 
     bce_by_agent: dict[str, float] = {}
     for a_idx, agent in enumerate(data.agent_names):
@@ -414,7 +432,11 @@ def compute_bce_from_posterior(
             continue
         task_idx = data.agent_task_idx[mask]
         scores = data.agent_scores[mask]
-        eta = alpha_mean[a_idx] + beta_mean[a_idx] * mu_task_mean[task_idx]
+        eta = (
+            alpha_mean[a_idx]
+            + beta_mean[a_idx] * mu_task_mean[task_idx]
+            + epsilon_mean[task_idx]
+        )
         p = special.expit(eta)
         eps = 1e-15
         p = np.clip(p, eps, 1 - eps)
