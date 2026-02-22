@@ -1,185 +1,185 @@
 convergence:
-  r_hat_max: 1.0039
-  ess_bulk_min: 855.7
+  r_hat_max: 1.0055
+  ess_bulk_min: 189.3
   converged: true
 agent_params:
   alpha[Claude 3 Opus (Inspect)]:
-    mean: 4.0056
-    sd: 0.502
-    r_hat: 1.003
-    ess_bulk: 1007.9
+    mean: 2.8353
+    sd: 0.4256
+    r_hat: 1.0021
+    ess_bulk: 256.1
   alpha[Claude 3.5 Sonnet (New) (Inspect)]:
-    mean: 5.5017
-    sd: 0.5606
-    r_hat: 1.0021
-    ess_bulk: 1158.1
+    mean: 3.8395
+    sd: 0.3998
+    r_hat: 1.0028
+    ess_bulk: 275.8
   alpha[Claude 3.5 Sonnet (Old) (Inspect)]:
-    mean: 4.788
-    sd: 0.5089
-    r_hat: 1.0039
-    ess_bulk: 970.4
+    mean: 3.9744
+    sd: 0.4645
+    r_hat: 1.0002
+    ess_bulk: 218.7
   alpha[Claude 3.7 Sonnet (Inspect)]:
-    mean: 7.3886
-    sd: 0.6893
-    r_hat: 1.002
-    ess_bulk: 992.3
-  alpha[Claude 4 Opus (Inspect)]:
-    mean: 9.4757
-    sd: 0.7634
+    mean: 5.1875
+    sd: 0.4266
     r_hat: 1.0023
-    ess_bulk: 962.1
+    ess_bulk: 366.4
+  alpha[Claude 4 Opus (Inspect)]:
+    mean: 5.768
+    sd: 0.4338
+    r_hat: 1.005
+    ess_bulk: 335.3
   alpha[Claude 4.1 Opus (Inspect)]:
-    mean: 11.3369
-    sd: 1.1381
-    r_hat: 1.0003
-    ess_bulk: 1157.5
+    mean: 6.2161
+    sd: 0.498
+    r_hat: 1.0041
+    ess_bulk: 450.0
   alpha[Claude Opus 4.5 (Inspect)]:
-    mean: 9.6594
-    sd: 0.841
-    r_hat: 1.0001
-    ess_bulk: 1117.7
+    mean: 6.2148
+    sd: 0.4963
+    r_hat: 1.0021
+    ess_bulk: 485.7
   alpha[GPT-4 0314]:
-    mean: 4.3152
-    sd: 0.5108
-    r_hat: 1.0013
-    ess_bulk: 1228.1
+    mean: 3.1942
+    sd: 0.4397
+    r_hat: 1.0027
+    ess_bulk: 281.1
   alpha[GPT-4 1106 (Inspect)]:
-    mean: 3.814
-    sd: 0.4719
-    r_hat: 1.0021
-    ess_bulk: 1072.5
+    mean: 2.9687
+    sd: 0.4386
+    r_hat: 1.002
+    ess_bulk: 309.2
   alpha[GPT-4 Turbo (Inspect)]:
-    mean: 4.4393
-    sd: 0.6438
-    r_hat: 1.0006
-    ess_bulk: 1292.6
+    mean: 4.0504
+    sd: 0.5542
+    r_hat: 1.001
+    ess_bulk: 240.8
   alpha[GPT-4o (Inspect)]:
-    mean: 3.5485
-    sd: 0.3914
-    r_hat: 1.0027
-    ess_bulk: 1053.4
-  alpha[GPT-5 (Inspect)]:
-    mean: 8.8981
-    sd: 0.7623
-    r_hat: 0.9995
-    ess_bulk: 1268.6
-  alpha[GPT-5.1-Codex-Max (Inspect)]:
-    mean: 10.3682
-    sd: 0.819
+    mean: 3.8884
+    sd: 0.4481
     r_hat: 1.0016
-    ess_bulk: 1197.1
+    ess_bulk: 320.4
+  alpha[GPT-5 (Inspect)]:
+    mean: 6.5841
+    sd: 0.5406
+    r_hat: 1.0052
+    ess_bulk: 479.4
+  alpha[GPT-5.1-Codex-Max (Inspect)]:
+    mean: 7.7937
+    sd: 0.653
+    r_hat: 1.0026
+    ess_bulk: 493.5
   alpha[GPT-5.2]:
-    mean: 9.9139
-    sd: 0.8714
-    r_hat: 1.0006
-    ess_bulk: 1622.8
+    mean: 6.9069
+    sd: 0.6256
+    r_hat: 1.0034
+    ess_bulk: 594.7
   alpha[Gemini 3 Pro]:
-    mean: 8.8973
-    sd: 0.7493
-    r_hat: 1.0
-    ess_bulk: 1232.0
-  alpha[o1 (Inspect)]:
-    mean: 5.7524
-    sd: 0.5105
-    r_hat: 0.9994
-    ess_bulk: 1150.5
-  alpha[o1-preview]:
-    mean: 5.6742
-    sd: 0.4474
-    r_hat: 1.0012
-    ess_bulk: 1020.0
-  alpha[o3 (Inspect)]:
-    mean: 9.0335
-    sd: 0.793
-    r_hat: 0.9996
-    ess_bulk: 1493.8
-  beta[Claude 3 Opus (Inspect)]:
-    mean: -1.2991
-    sd: 0.127
-    r_hat: 1.0009
-    ess_bulk: 1204.2
-  beta[Claude 3.5 Sonnet (New) (Inspect)]:
-    mean: -1.2014
-    sd: 0.1185
-    r_hat: 1.0021
-    ess_bulk: 1102.8
-  beta[Claude 3.5 Sonnet (Old) (Inspect)]:
-    mean: -1.1913
-    sd: 0.1132
-    r_hat: 1.0033
-    ess_bulk: 1094.4
-  beta[Claude 3.7 Sonnet (Inspect)]:
-    mean: -1.3195
-    sd: 0.1264
-    r_hat: 1.0004
-    ess_bulk: 977.6
-  beta[Claude 4 Opus (Inspect)]:
-    mean: -1.5668
-    sd: 0.1329
-    r_hat: 1.0012
-    ess_bulk: 933.2
-  beta[Claude 4.1 Opus (Inspect)]:
-    mean: -1.8608
-    sd: 0.1962
-    r_hat: 1.0015
-    ess_bulk: 1045.3
-  beta[Claude Opus 4.5 (Inspect)]:
-    mean: -1.2769
-    sd: 0.122
-    r_hat: 0.9999
-    ess_bulk: 964.9
-  beta[GPT-4 0314]:
-    mean: -1.4691
-    sd: 0.1346
-    r_hat: 1.0015
-    ess_bulk: 1413.4
-  beta[GPT-4 1106 (Inspect)]:
-    mean: -1.2786
-    sd: 0.1229
-    r_hat: 0.9999
-    ess_bulk: 1674.3
-  beta[GPT-4 Turbo (Inspect)]:
-    mean: -1.5522
-    sd: 0.1778
-    r_hat: 1.0009
-    ess_bulk: 1610.4
-  beta[GPT-4o (Inspect)]:
-    mean: -1.0398
-    sd: 0.0922
-    r_hat: 1.0017
-    ess_bulk: 1380.2
-  beta[GPT-5 (Inspect)]:
-    mean: -1.245
-    sd: 0.116
-    r_hat: 1.0012
-    ess_bulk: 993.0
-  beta[GPT-5.1-Codex-Max (Inspect)]:
-    mean: -1.4117
-    sd: 0.1209
-    r_hat: 1.0004
-    ess_bulk: 982.9
-  beta[GPT-5.2]:
-    mean: -1.223
-    sd: 0.1178
-    r_hat: 1.0027
-    ess_bulk: 1150.6
-  beta[Gemini 3 Pro]:
-    mean: -1.2149
-    sd: 0.1134
-    r_hat: 1.0019
-    ess_bulk: 855.7
-  beta[o1 (Inspect)]:
-    mean: -1.0634
-    sd: 0.0954
-    r_hat: 0.9996
-    ess_bulk: 1044.8
-  beta[o1-preview]:
-    mean: -1.2237
-    sd: 0.0931
-    r_hat: 1.0006
-    ess_bulk: 1001.1
-  beta[o3 (Inspect)]:
-    mean: -1.3849
-    sd: 0.1297
+    mean: 7.1048
+    sd: 0.6127
     r_hat: 0.9997
-    ess_bulk: 1168.0
+    ess_bulk: 654.7
+  alpha[o1 (Inspect)]:
+    mean: 5.3732
+    sd: 0.4563
+    r_hat: 1.0055
+    ess_bulk: 384.3
+  alpha[o1-preview]:
+    mean: 5.5939
+    sd: 0.4484
+    r_hat: 1.0042
+    ess_bulk: 316.0
+  alpha[o3 (Inspect)]:
+    mean: 7.6244
+    sd: 0.6022
+    r_hat: 1.0033
+    ess_bulk: 455.1
+  beta[Claude 3 Opus (Inspect)]:
+    mean: -1.2581
+    sd: 0.0985
+    r_hat: 1.0008
+    ess_bulk: 256.1
+  beta[Claude 3.5 Sonnet (New) (Inspect)]:
+    mean: -1.0163
+    sd: 0.0801
+    r_hat: 0.9997
+    ess_bulk: 254.8
+  beta[Claude 3.5 Sonnet (Old) (Inspect)]:
+    mean: -1.2296
+    sd: 0.1057
+    r_hat: 1.0019
+    ess_bulk: 189.3
+  beta[Claude 3.7 Sonnet (Inspect)]:
+    mean: -1.0351
+    sd: 0.0776
+    r_hat: 1.001
+    ess_bulk: 338.3
+  beta[Claude 4 Opus (Inspect)]:
+    mean: -1.0148
+    sd: 0.0765
+    r_hat: 1.0014
+    ess_bulk: 336.9
+  beta[Claude 4.1 Opus (Inspect)]:
+    mean: -1.0746
+    sd: 0.0864
+    r_hat: 1.0011
+    ess_bulk: 449.7
+  beta[Claude Opus 4.5 (Inspect)]:
+    mean: -0.7723
+    sd: 0.0807
+    r_hat: 1.003
+    ess_bulk: 404.2
+  beta[GPT-4 0314]:
+    mean: -1.4488
+    sd: 0.1032
+    r_hat: 1.0
+    ess_bulk: 329.5
+  beta[GPT-4 1106 (Inspect)]:
+    mean: -1.3341
+    sd: 0.1018
+    r_hat: 0.9995
+    ess_bulk: 376.0
+  beta[GPT-4 Turbo (Inspect)]:
+    mean: -1.7772
+    sd: 0.1455
+    r_hat: 1.0019
+    ess_bulk: 270.5
+  beta[GPT-4o (Inspect)]:
+    mean: -1.3999
+    sd: 0.1007
+    r_hat: 1.0007
+    ess_bulk: 355.7
+  beta[GPT-5 (Inspect)]:
+    mean: -0.9237
+    sd: 0.0892
+    r_hat: 1.0011
+    ess_bulk: 428.5
+  beta[GPT-5.1-Codex-Max (Inspect)]:
+    mean: -1.0576
+    sd: 0.1035
+    r_hat: 1.001
+    ess_bulk: 396.3
+  beta[GPT-5.2]:
+    mean: -0.7834
+    sd: 0.0963
+    r_hat: 1.0012
+    ess_bulk: 512.1
+  beta[Gemini 3 Pro]:
+    mean: -0.9713
+    sd: 0.0964
+    r_hat: 1.0011
+    ess_bulk: 560.2
+  beta[o1 (Inspect)]:
+    mean: -1.1371
+    sd: 0.0856
+    r_hat: 1.0018
+    ess_bulk: 383.4
+  beta[o1-preview]:
+    mean: -1.4304
+    sd: 0.0957
+    r_hat: 1.0007
+    ess_bulk: 350.4
+  beta[o3 (Inspect)]:
+    mean: -1.2314
+    sd: 0.1017
+    r_hat: 1.0004
+    ess_bulk: 363.8

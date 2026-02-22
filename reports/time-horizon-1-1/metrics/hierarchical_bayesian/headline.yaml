@@ -1,90 +1,90 @@
 Claude 3 Opus (Inspect):
-  slope: -1.296
-  intercept: 3.988
-  time_horizon_p50: 8.477
+  slope: -1.255
+  intercept: 2.824
+  time_horizon_p50: 4.748
   empirical_success_rates: {}
 Claude 3.5 Sonnet (New) (Inspect):
-  slope: -1.196
-  intercept: 5.466
-  time_horizon_p50: 23.962
+  slope: -1.014
+  intercept: 3.832
+  time_horizon_p50: 13.78
   empirical_success_rates: {}
 Claude 3.5 Sonnet (Old) (Inspect):
-  slope: -1.189
-  intercept: 4.776
-  time_horizon_p50: 16.241
+  slope: -1.226
+  intercept: 3.98
+  time_horizon_p50: 9.388
   empirical_success_rates: {}
 Claude 3.7 Sonnet (Inspect):
-  slope: -1.309
-  intercept: 7.337
-  time_horizon_p50: 48.615
+  slope: -1.032
+  intercept: 5.185
+  time_horizon_p50: 32.222
   empirical_success_rates: {}
 Claude 4 Opus (Inspect):
-  slope: -1.562
-  intercept: 9.45
-  time_horizon_p50: 66.189
+  slope: -1.011
+  intercept: 5.757
+  time_horizon_p50: 51.365
   empirical_success_rates: {}
 Claude 4.1 Opus (Inspect):
-  slope: -1.852
-  intercept: 11.3
-  time_horizon_p50: 68.645
+  slope: -1.075
+  intercept: 6.204
+  time_horizon_p50: 55.03
   empirical_success_rates: {}
 Claude Opus 4.5 (Inspect):
-  slope: -1.275
-  intercept: 9.636
-  time_horizon_p50: 189.821
+  slope: -0.767
+  intercept: 6.198
+  time_horizon_p50: 265.588
   empirical_success_rates: {}
 GPT-4 0314:
-  slope: -1.462
-  intercept: 4.281
-  time_horizon_p50: 7.628
+  slope: -1.443
+  intercept: 3.18
+  time_horizon_p50: 4.602
   empirical_success_rates: {}
 GPT-4 1106 (Inspect):
-  slope: -1.274
-  intercept: 3.796
-  time_horizon_p50: 7.894
+  slope: -1.331
+  intercept: 2.951
+  time_horizon_p50: 4.657
   empirical_success_rates: {}
 GPT-4 Turbo (Inspect):
-  slope: -1.539
-  intercept: 4.392
-  time_horizon_p50: 7.223
+  slope: -1.772
+  intercept: 4.038
+  time_horizon_p50: 4.844
   empirical_success_rates: {}
 GPT-4o (Inspect):
-  slope: -1.038
-  intercept: 3.537
-  time_horizon_p50: 10.657
+  slope: -1.396
+  intercept: 3.871
+  time_horizon_p50: 6.845
   empirical_success_rates: {}
 GPT-5 (Inspect):
-  slope: -1.237
-  intercept: 8.87
-  time_horizon_p50: 142.275
+  slope: -0.92
+  intercept: 6.558
+  time_horizon_p50: 140.55
   empirical_success_rates: {}
 GPT-5.1-Codex-Max (Inspect):
-  slope: -1.407
-  intercept: 10.346
-  time_horizon_p50: 163.587
+  slope: -1.056
+  intercept: 7.774
+  time_horizon_p50: 165.537
   empirical_success_rates: {}
 GPT-5.2:
-  slope: -1.219
-  intercept: 9.891
-  time_horizon_p50: 276.92
+  slope: -0.784
+  intercept: 6.888
+  time_horizon_p50: 457.234
   empirical_success_rates: {}
 Gemini 3 Pro:
-  slope: -1.212
-  intercept: 8.884
-  time_horizon_p50: 160.914
+  slope: -0.966
+  intercept: 7.088
+  time_horizon_p50: 159.662
   empirical_success_rates: {}
 o1 (Inspect):
-  slope: -1.058
-  intercept: 5.725
-  time_horizon_p50: 42.617
+  slope: -1.134
+  intercept: 5.341
+  time_horizon_p50: 26.625
   empirical_success_rates: {}
 o1-preview:
-  slope: -1.22
-  intercept: 5.652
-  time_horizon_p50: 24.883
+  slope: -1.427
+  intercept: 5.555
+  time_horizon_p50: 15.069
   empirical_success_rates: {}
 o3 (Inspect):
-  slope: -1.38
-  intercept: 8.997
-  time_horizon_p50: 92.575
+  slope: -1.23
+  intercept: 7.605
+  time_horizon_p50: 73.168
   empirical_success_rates: {}

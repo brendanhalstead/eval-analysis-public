@@ -3303,12 +3303,12 @@ stages:
       size: 2374
     - path: ../../src/horizon/utils/bayesian_hierarchical.py
       hash: md5
-      md5: 430e52e4b535efd8c4c8048726ec745a
-      size: 13599
+      md5: 2102f4a5ee2163d925a1d9033303137f
+      size: 14368
     - path: ../../src/horizon/wrangle/bayesian.py
       hash: md5
-      md5: e8a3dc504ac55579263bf8f9903198a1
-      size: 30157
+      md5: 5755710b0976aa7573a0608af2fec841
+      size: 30174
     - path: data/raw/runs.jsonl
       hash: md5
       md5: 96633ce4202dc1d93ccfe9268143d203
@@ -3335,24 +3335,24 @@ stages:
     outs:
     - path: data/wrangled/hierarchical_bayesian/ga_rebench.csv
       hash: md5
-      md5: 7af91e47be7f26131c07933640d0d698
-      size: 2851
+      md5: d3cea1d59cb6f44127481bd65c17d9e1
+      size: 2816
     - path: data/wrangled/hierarchical_bayesian/ga_rebench_task_difficulty.csv
       hash: md5
-      md5: 0202177d0fc21f64eababeafe4e029cb
-      size: 22407
+      md5: cba391509759759542a76c21ff968a60
+      size: 22396
     - path: metrics/hierarchical_bayesian/ga_rebench.yaml
       hash: md5
-      md5: c1063ab564258e5750c2f2feb52b647e
-      size: 2048
+      md5: 77f10250d860ce8750c85a9ce1a1ae27
+      size: 2036
     - path: metrics/hierarchical_bayesian/ga_rebench_diagnostics.yaml
       hash: md5
-      md5: ef6319d98bdab7ec612c09ab135f799b
-      size: 3706
+      md5: 55f9357c91b41ff9fc35e48fcae83303
+      size: 3690
     - path: metrics/hierarchical_bayesian/ga_rebench_hyperparams.yaml
       hash: md5
-      md5: 0b576020d5b865148cedfcdcf37b4e39
-      size: 743
+      md5: dbabd3025229c438a7ab3377dd486da0
+      size: 894
   plot_hierarchical_bayesian@headline:
     cmd: python -m horizon.plot.logistic --input-file 
       data/wrangled/hierarchical_bayesian/headline.csv --runs-file 
