@@ -1,0 +1,90 @@
+Claude 3 Opus (Inspect):
+  slope: -1.296
+  intercept: 3.988
+  time_horizon_p50: 8.477
+  empirical_success_rates: {}
+Claude 3.5 Sonnet (New) (Inspect):
+  slope: -1.196
+  intercept: 5.466
+  time_horizon_p50: 23.962
+  empirical_success_rates: {}
+Claude 3.5 Sonnet (Old) (Inspect):
+  slope: -1.189
+  intercept: 4.776
+  time_horizon_p50: 16.241
+  empirical_success_rates: {}
+Claude 3.7 Sonnet (Inspect):
+  slope: -1.309
+  intercept: 7.337
+  time_horizon_p50: 48.615
+  empirical_success_rates: {}
+Claude 4 Opus (Inspect):
+  slope: -1.562
+  intercept: 9.45
+  time_horizon_p50: 66.189
+  empirical_success_rates: {}
+Claude 4.1 Opus (Inspect):
+  slope: -1.852
+  intercept: 11.3
+  time_horizon_p50: 68.645
+  empirical_success_rates: {}
+Claude Opus 4.5 (Inspect):
+  slope: -1.275
+  intercept: 9.636
+  time_horizon_p50: 189.821
+  empirical_success_rates: {}
+GPT-4 0314:
+  slope: -1.462
+  intercept: 4.281
+  time_horizon_p50: 7.628
+  empirical_success_rates: {}
+GPT-4 1106 (Inspect):
+  slope: -1.274
+  intercept: 3.796
+  time_horizon_p50: 7.894
+  empirical_success_rates: {}
+GPT-4 Turbo (Inspect):
+  slope: -1.539
+  intercept: 4.392
+  time_horizon_p50: 7.223
+  empirical_success_rates: {}
+GPT-4o (Inspect):
+  slope: -1.038
+  intercept: 3.537
+  time_horizon_p50: 10.657
+  empirical_success_rates: {}
+GPT-5 (Inspect):
+  slope: -1.237
+  intercept: 8.87
+  time_horizon_p50: 142.275
+  empirical_success_rates: {}
+GPT-5.1-Codex-Max (Inspect):
+  slope: -1.407
+  intercept: 10.346
+  time_horizon_p50: 163.587
+  empirical_success_rates: {}
+GPT-5.2:
+  slope: -1.219
+  intercept: 9.891
+  time_horizon_p50: 276.92
+  empirical_success_rates: {}
+Gemini 3 Pro:
+  slope: -1.212
+  intercept: 8.884
+  time_horizon_p50: 160.914
+  empirical_success_rates: {}
+o1 (Inspect):
+  slope: -1.058
+  intercept: 5.725
+  time_horizon_p50: 42.617
+  empirical_success_rates: {}
+o1-preview:
+  slope: -1.22
+  intercept: 5.652
+  time_horizon_p50: 24.883
+  empirical_success_rates: {}
+o3 (Inspect):
+  slope: -1.38
+  intercept: 8.997
+  time_horizon_p50: 92.575
+  empirical_success_rates: {}
