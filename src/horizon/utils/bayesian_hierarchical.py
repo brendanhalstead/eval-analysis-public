@@ -23,8 +23,13 @@ Hierarchy on task difficulty:
 
 Human observation model (successful baselines only):
 
-    sigma_human ~ HalfNormal(1.5)
-    log2(duration_ij) ~ Normal(mu_task_i, sigma_human)
+    LogNormal variant (default):
+        sigma_human ~ HalfNormal(1.5)
+        log2(duration_ij) ~ Normal(mu_task_i, sigma_human)
+
+    Weibull variant (observation_model="weibull"):
+        k_human ~ Exponential(1)
+        duration_ij ~ Weibull(k_human, lambda=2^mu_task_i)
 
 Expert-estimate model (for tasks with no baselines):
 
@@ -52,6 +57,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 import pymc as pm
+import pytensor.tensor as pt
 from numpy.typing import NDArray
 from scipy import special
 
@@ -68,8 +74,14 @@ class HierarchicalPrior:
     sigma_global_scale: float = 3.0
     sigma_family_scale: float = 2.0
 
-    # Human observation noise
+    # Human observation noise (lognormal model: Normal in log2 space)
     sigma_human_scale: float = 1.5
+
+    # Weibull observation model: shape parameter prior
+    # k_human ~ Exponential(k_human_prior_rate)
+    # MaxEnt given E[k] = 1/rate.  With rate=1, E[k]=1 encodes
+    # "exponential (constant hazard) is the default" [structural].
+    k_human_prior_rate: float = 1.0
 
     # Expert estimate noise
     sigma_estimate_scale: float = 2.5
@@ -101,6 +113,7 @@ class HierarchicalData:
     # Human baseline observations (successful runs)
     human_task_idx: NDArray[Any]     # (n_human,) int -> task index
     human_log2_duration: NDArray[Any]  # (n_human,) float
+    human_duration_minutes: NDArray[Any]  # (n_human,) float — raw, for Weibull
 
     # Expert estimates (tasks with no baselines)
     estimate_task_idx: NDArray[Any]  # (n_estimate,) int -> task index
@@ -133,6 +146,7 @@ class HierarchicalData:
 def build_hierarchical_model(
     data: HierarchicalData,
     prior: HierarchicalPrior | None = None,
+    observation_model: str = "lognormal",
 ) -> pm.Model:
     """Build the PyMC hierarchical model.
 
@@ -140,6 +154,11 @@ def build_hierarchical_model(
     ----------
     data : preprocessed HierarchicalData
     prior : prior specification (uses defaults if None)
+    observation_model : "lognormal" or "weibull".
+        "lognormal": log₂(duration) ~ Normal(μ_task, σ_human)  [current default]
+        "weibull":   duration ~ Weibull(k_human, λ=2^μ_task)
+        Expert estimates always use Normal in log₂ space (they're guesses,
+        not completion times — no failure-rate interpretation).
 
     Returns
     -------
@@ -147,6 +166,11 @@ def build_hierarchical_model(
     """
     if prior is None:
         prior = HierarchicalPrior()
+    if observation_model not in ("lognormal", "weibull"):
+        raise ValueError(
+            f"observation_model must be 'lognormal' or 'weibull', "
+            f"got '{observation_model}'"
+        )
 
     coords = {
         "family": data.family_ids,
@@ -179,19 +203,48 @@ def build_hierarchical_model(
         # ---------------------------------------------------------------
         # Human observation model
         # ---------------------------------------------------------------
-        if len(data.human_log2_duration) > 0:
-            sigma_human = pm.HalfNormal(
-                "sigma_human", sigma=prior.sigma_human_scale
-            )
-            pm.Normal(
-                "human_obs",
-                mu=mu_task[data.human_task_idx],
-                sigma=sigma_human,
-                observed=data.human_log2_duration,
-            )
+        if observation_model == "lognormal":
+            # log₂(t) ~ Normal(μ_task, σ_human)  ↔  t ~ LogNormal₂
+            if len(data.human_log2_duration) > 0:
+                sigma_human = pm.HalfNormal(
+                    "sigma_human", sigma=prior.sigma_human_scale
+                )
+                pm.Normal(
+                    "human_obs",
+                    mu=mu_task[data.human_task_idx],
+                    sigma=sigma_human,
+                    observed=data.human_log2_duration,
+                )
+        elif observation_model == "weibull":
+            # t ~ Weibull(k, λ=2^μ_task)
+            #
+            # Moss's argument: the Weibull has a clean failure-rate
+            # interpretation — the hazard h(t) = (k/λ)(t/λ)^{k-1} is
+            # monotone, and the shape k controls whether tasks become
+            # harder to finish (k<1, decreasing hazard) or easier (k>1,
+            # increasing hazard) as time passes.  LogNormal has a
+            # non-monotone hazard that rises then falls — this is harder
+            # to justify on physical grounds.
+            #
+            # The scale λ_i = 2^{μ_task_i} connects to the same latent
+            # difficulty.  Note: E[Weibull(k,λ)] = λ·Γ(1+1/k) ≠ λ, so
+            # μ_task is the log₂ of the *characteristic* time, not the
+            # mean or median.  The agent model's (α,β) absorb this shift.
+            if len(data.human_duration_minutes) > 0:
+                k_human = pm.Exponential(
+                    "k_human", lam=prior.k_human_prior_rate
+                )
+                lambda_human = pt.exp2(mu_task[data.human_task_idx])
+                pm.Weibull(
+                    "human_obs",
+                    alpha=k_human,
+                    beta=lambda_human,
+                    observed=data.human_duration_minutes,
+                )
 
         # ---------------------------------------------------------------
-        # Expert estimate model
+        # Expert estimate model (always Normal in log₂ — estimates are
+        # guesses, not completion times with a failure-rate story)
         # ---------------------------------------------------------------
         if len(data.estimate_log2_minutes) > 0:
             sigma_estimate = pm.HalfNormal(
@@ -395,7 +448,8 @@ def extract_hyperparameter_summary(idata: Any) -> dict[str, dict[str, float]]:
 
     for name in [
         "mu_global", "sigma_global", "sigma_family",
-        "sigma_human", "sigma_estimate", "sigma_epsilon",
+        "sigma_human", "k_human",  # sigma_human (lognormal) or k_human (weibull)
+        "sigma_estimate", "sigma_epsilon",
     ]:
         if name in posterior:
             samples = posterior[name].values.ravel()

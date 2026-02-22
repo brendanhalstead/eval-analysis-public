@@ -594,6 +594,83 @@ how much prior mass each wastes on regions of parameter space the data
 don't support.
 
 
+### M9: Weibull observation model (Moss's suggestion)
+
+Replaces the LogNormal human observation model with Weibull:
+
+```
+# Human observation model — Weibull on raw durations
+k_human ~ Exponential(1)             # shape parameter
+λ_i = 2^{μ_task_i}                   # scale tied to latent difficulty
+
+duration_ij ~ Weibull(k_human, λ_i)
+
+# Expert estimates — unchanged (Normal in log₂, no failure-rate story)
+log₂(estimate_i) ~ Normal(μ_task_i, σ_estimate)
+```
+
+Everything else (hierarchy, agent success model, residuals) is the same as
+whichever base model you pair this with.  The comparison is purely about the
+human timing noise distribution.
+
+**Motivation** (Moss, LessWrong 2025): "I would also try a Weibull distribution
+instead of log-normal, since the log-normal is typically heavier-tailed and
+the Weibull is easier to justify on theoretical grounds using its failure-rate
+interpretation."
+
+**Derivation of prior for k_human**:
+
+What we know: k > 0 (shape parameter) **[structural]**.  The special case
+k = 1 gives the Exponential distribution, which is MaxEnt on [0, ∞) given
+only E[X].  Without evidence of non-constant hazard rate, k = 1 is the
+maximally non-committal shape **[structural — Jaynes toolkit]**.
+
+Constraint: E[k] = 1 **[structural — "exponential is the default"]**.
+MaxEnt on (0, ∞) with E[k] = 1: **Exponential(rate = 1)**.
+
+Properties: mode = 0, mean = 1, SD = 1.  Allows k < 1 (decreasing hazard:
+tasks become harder to finish over time) and k > 1 (increasing hazard:
+steady progress).  The Exponential prior slightly favors k < 1 (mode at 0),
+which encodes a mild belief that debugging-style tasks have decreasing
+hazard.  This is defensible but not obligatory.
+
+**On the scale parameter**: λ_i = 2^{μ_task_i} is deterministic given
+μ_task — no separate prior.  Note: E[Weibull(k, λ)] = λ · Γ(1 + 1/k) ≠ λ,
+so μ_task in the Weibull model is the log₂ of the *characteristic time*,
+not the median or mean.  In the LogNormal model, 2^{μ_task} is the median.
+The agent model's (α, β) absorb this semantic shift.
+
+**Expert estimates stay Normal-in-log₂**: Expert estimates are subjective
+guesses about task duration, not actual completion times.  They have no
+failure-rate interpretation — a person doesn't "fail to estimate" at a
+hazard rate.  The Normal-in-log₂ model (encoding scale-invariant noise
+in the estimate) is appropriate regardless of how actual completions are
+distributed.
+
+**Parameter count (model-specific)**: 1 (k_human).  This replaces σ_human
+(also 1 parameter), so the model has the same complexity as the base model
+with LogNormal observations.
+
+**What this tests**: Does the shape of the human timing noise distribution
+matter?  LogNormal has a non-monotone hazard (rises then falls);
+Weibull has a monotone hazard.  If the posterior predictive checks show
+that one model reproduces the observed distribution of human completion
+times better, that's evidence for its noise model.
+
+**Bayes factor eligibility**: k_human ~ Exponential(1) is proper.
+σ_human ~ Jeffreys is improper.  These are NOT shared parameters — they
+play the same role (human noise) but in different models with different
+likelihoods.  **BF(M_base+LogNormal, M_base+Weibull) is undefined**
+because σ_human is Jeffreys in the LogNormal variant.
+
+However, if we gave σ_human a proper prior (e.g., Exponential(1/5) as
+the "computational convenience" alternative from §1), then both
+observation-model variants would have proper unique parameters, and the
+Bayes factor would be well-defined.  This is one case where the
+practical argument for a weak proper prior has real value: it enables
+the comparison.
+
+
 ## 3. Which Bayes factors are well-defined?
 
 A Bayes factor BF(Mi, Mj) is well-defined when every parameter unique
@@ -616,6 +693,7 @@ compute," literally not a number.
 | M6 | (lacks σ_global, σ_family from hierarchical models) | — | see below |
 | M7 | σ_γ, σ_ν + γ coefficients | Jeffreys × 2 | **No** |
 | M8 | σ_θ, θ_a, a_i (replace α, β) | Jeffreys on σ_θ | **No** |
+| M9 | k_human (replaces σ_human) | Exponential(1) | **Yes** — E[k]=1 is structurally defensible |
 
 "Unique to this model" means relative to the shared block.  When
 comparing two specific models, parameters shared between them cancel
@@ -628,7 +706,18 @@ M_base has no unique parameters.  M1 adds a_i ~ Exponential(1) (proper).
 All shared parameters (hierarchy, observation models, α, β) cancel.
 Defined. ✓
 
-This is the only well-defined Bayes factor with our honest priors.
+**BF(M_base, M9)** — does Weibull fit human timing better than LogNormal?
+*Only if σ_human in M_base is given a proper prior* (e.g., Exponential(1/5)
+instead of Jeffreys).  Then M_base's unique parameter is σ_human ~
+Exponential(1/5) (proper), and M9's is k_human ~ Exponential(1) (proper).
+All other parameters cancel.  Defined if and only if σ_human is proper. ✓*
+
+With honest Jeffreys on σ_human, this comparison is undefined.  Use
+posterior predictive checks instead.
+
+These are the only well-defined Bayes factors with our honest priors
+(M_base vs. M1 unconditionally; M_base vs. M9 conditionally on σ_human
+being proper).
 
 ### Undefined Bayes factors (and why)
 
@@ -745,7 +834,7 @@ the data don't distinguish the models.  This is a valid finding.
 
 | Parameter | Current | Honest MaxEnt | Issue |
 |-----------|---------|---------------|-------|
-| σ_human | HalfNormal(1.5) | Jeffreys 1/σ | E ≈ 1.20 is suspiciously close to empirical 0.97 |
+| σ_human | HalfNormal(1.5) | Jeffreys 1/σ | E ≈ 1.20 is suspiciously close to empirical 0.97.  M9 replaces this entirely with Weibull(k, 2^μ), k ~ Exp(1). |
 | σ_estimate | HalfNormal(2.5) | Jeffreys 1/σ (or Exp(1/2) if Barry quote accepted) | Barry quote is about this dataset |
 | σ_global | HalfNormal(3) | Jeffreys 1/σ | No external basis for E[σ] ≈ 3 |
 | σ_family | HalfNormal(2) | Jeffreys 1/σ | No external basis for E[σ] ≈ 1.5 |

@@ -403,6 +403,7 @@ def prepare_hierarchical_data(
         [task_to_idx[t] for t in valid_baselines["task_id"]]
     )
     human_log2_duration = valid_baselines["log2_duration"].values.astype(float)
+    human_duration_minutes = valid_baselines["duration_minutes"].values.astype(float)
 
     # --- Expert estimates ---
     # Tasks with no baselines + RE-Bench tasks → use human_minutes as estimate
@@ -441,6 +442,7 @@ def prepare_hierarchical_data(
         task_to_family_idx=task_to_family_idx,
         human_task_idx=human_task_idx,
         human_log2_duration=human_log2_duration,
+        human_duration_minutes=human_duration_minutes,
         estimate_task_idx=estimate_task_idx,
         estimate_log2_minutes=estimate_log2_minutes,
         agent_names=agent_names,
@@ -463,6 +465,7 @@ def run_hierarchical_bayesian(
     target_accept: float = 0.9,
     random_seed: int = 42,
     include_empirical_rates: bool = True,
+    observation_model: str = "lognormal",
     output_task_difficulty_file: pathlib.Path | None = None,
     output_hyperparams_file: pathlib.Path | None = None,
     output_diagnostics_file: pathlib.Path | None = None,
@@ -488,6 +491,8 @@ def run_hierarchical_bayesian(
     target_accept : NUTS target acceptance rate
     random_seed : for reproducibility
     include_empirical_rates : whether to add binned empirical rates
+    observation_model : "lognormal" (default) or "weibull" for human
+        baseline noise.  See build_hierarchical_model() for details.
     output_task_difficulty_file : optional path to save per-task posteriors
     output_hyperparams_file : optional path to save hyperparameter summaries
     output_diagnostics_file : optional path to save MCMC diagnostics
@@ -521,7 +526,7 @@ def run_hierarchical_bayesian(
 
     # Step 2: Build model
     prior = HierarchicalPrior()
-    model = build_hierarchical_model(data, prior)
+    model = build_hierarchical_model(data, prior, observation_model=observation_model)
     n_free = sum(v.size for v in model.initial_point().values())
     logger.info(f"Built hierarchical model with {n_free} free parameters")
 
@@ -592,20 +597,36 @@ def run_hierarchical_bayesian(
         logger.info(f"Saved hyperparameters to {output_hyperparams_file}")
 
     if output_diagnostics_file is not None:
-        _save_diagnostics(idata, output_diagnostics_file)
+        _save_diagnostics(idata, output_diagnostics_file, observation_model)
 
     return regressions
 
 
-def _save_diagnostics(idata: Any, output_file: pathlib.Path) -> None:
+def _save_diagnostics(
+    idata: Any, output_file: pathlib.Path, observation_model: str = "lognormal"
+) -> None:
     """Save MCMC diagnostic summary to YAML."""
     import arviz as az
 
     output_file.parent.mkdir(parents=True, exist_ok=True)
 
+    var_names = [
+        "alpha", "beta", "mu_global", "sigma_global",
+        "sigma_family", "sigma_epsilon",
+    ]
+    # Include observation-model-specific parameters
+    if observation_model == "weibull":
+        var_names.append("k_human")
+    else:
+        var_names.append("sigma_human")
+
+    # Filter to variables that actually exist in the posterior
+    available = list(idata.posterior.data_vars)
+    var_names = [v for v in var_names if v in available]
+
     summary = az.summary(
         idata,
-        var_names=["alpha", "beta", "mu_global", "sigma_global", "sigma_family", "sigma_epsilon"],
+        var_names=var_names,
         round_to=4,
     )
 
@@ -719,6 +740,7 @@ def main_hierarchical(
     n_chains: int = 2,
     target_accept: float = 0.9,
     random_seed: int = 42,
+    observation_model: str = "lognormal",
 ) -> None:
     """CLI entry point for the hierarchical Bayesian model."""
     import dvc.api
@@ -739,6 +761,7 @@ def main_hierarchical(
         target_accept=target_accept,
         random_seed=random_seed,
         include_empirical_rates=True,
+        observation_model=observation_model,
         output_task_difficulty_file=output_task_difficulty_file,
         output_hyperparams_file=output_hyperparams_file,
         output_diagnostics_file=output_diagnostics_file,
@@ -786,6 +809,11 @@ def get_parser() -> argparse.ArgumentParser:
     hier.add_argument("--n-chains", type=int, default=2)
     hier.add_argument("--target-accept", type=float, default=0.9)
     hier.add_argument("--random-seed", type=int, default=42)
+    hier.add_argument(
+        "--observation-model", type=str, default="lognormal",
+        choices=["lognormal", "weibull"],
+        help="Human baseline noise model: 'lognormal' (Normal in log2) or 'weibull'",
+    )
     hier.add_argument("-v", "--verbose", action="store_true")
 
     return parser
@@ -809,6 +837,7 @@ if __name__ == "__main__":
             "output_task_difficulty_file", "output_hyperparams_file",
             "output_diagnostics_file", "n_samples", "n_tune",
             "n_chains", "target_accept", "random_seed",
+            "observation_model",
         ]:
             args.pop(key, None)
         main(**args)
