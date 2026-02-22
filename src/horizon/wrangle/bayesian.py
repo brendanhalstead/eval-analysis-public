@@ -662,11 +662,12 @@ def _write_metrics_file(
             "slope": round(float(row["coefficient"]), 3),
             "intercept": round(float(row["intercept"]), 3),
             "time_horizon_p50": round(float(row["p50"]), 3),
-            "log_evidence": round(float(row["log_evidence"]), 3),
             "empirical_success_rates": {
                 col: round(float(row[col]), 3) for col in bin_columns if col in row
             },
         }
+        if "log_evidence" in row.index:
+            agent_metrics["log_evidence"] = round(float(row["log_evidence"]), 3)
         metrics[str(agent)] = agent_metrics
 
     output_metrics_file.parent.mkdir(parents=True, exist_ok=True)

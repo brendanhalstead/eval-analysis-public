@@ -3214,3 +3214,142 @@ stages:
       hash: md5
       md5: 01fbd977a0b4e73adbc6faa6cd16ed09
       size: 213715
+  wrangle_hierarchical_bayesian@headline:
+    cmd: python -m horizon.wrangle.bayesian hierarchical --fig-name headline 
+      --runs-file data/raw/runs.jsonl --output-logistic-fits-file 
+      data/wrangled/hierarchical_bayesian/headline.csv --release-dates 
+      ../../data/external/release_dates.yaml --output-metrics-file 
+      metrics/hierarchical_bayesian/headline.yaml --output-task-difficulty-file 
+      data/wrangled/hierarchical_bayesian/headline_task_difficulty.csv 
+      --output-hyperparams-file 
+      metrics/hierarchical_bayesian/headline_hyperparams.yaml 
+      --output-diagnostics-file 
+      metrics/hierarchical_bayesian/headline_diagnostics.yaml --n-samples 1000 
+      --n-tune 1000 --n-chains 2 --target-accept 0.9 --random-seed 42 -v
+    deps:
+    - path: ../../data/external/release_dates.yaml
+      hash: md5
+      md5: 47a919cff55fbbd62241a82464ac741a
+      size: 2374
+    - path: ../../src/horizon/utils/bayesian_hierarchical.py
+      hash: md5
+      md5: 430e52e4b535efd8c4c8048726ec745a
+      size: 13599
+    - path: ../../src/horizon/wrangle/bayesian.py
+      hash: md5
+      md5: e8a3dc504ac55579263bf8f9903198a1
+      size: 30157
+    - path: data/raw/runs.jsonl
+      hash: md5
+      md5: 96633ce4202dc1d93ccfe9268143d203
+      size: 13105640
+    params:
+      params.yaml:
+        hierarchical_bayesian:
+          n_samples: 1000
+          n_tune: 1000
+          n_chains: 2
+          target_accept: 0.9
+          random_seed: 42
+      fig_params/figs.yaml:
+        figs.wrangle_logistic.headline:
+          runs_file: data/raw/runs.jsonl
+          weighting: invsqrt_task_weight
+          categories: ftr
+          regularization: 0.1
+          exclude: []
+          success_percents:
+          - 50
+          - 80
+          confidence_level: 0.95
+    outs:
+    - path: data/wrangled/hierarchical_bayesian/headline.csv
+      hash: md5
+      md5: ae5208764791b6677c293a9a3214fcfa
+      size: 3379
+    - path: data/wrangled/hierarchical_bayesian/headline_task_difficulty.csv
+      hash: md5
+      md5: 05be4447f1573f06e9d50ef03d93c9df
+      size: 31975
+    - path: metrics/hierarchical_bayesian/headline.yaml
+      hash: md5
+      md5: 4c73a1e16169db8e7c1944f8abe0e2fd
+      size: 2039
+    - path: metrics/hierarchical_bayesian/headline_diagnostics.yaml
+      hash: md5
+      md5: 162086578a6f34f89c706c97699c57fe
+      size: 3718
+    - path: metrics/hierarchical_bayesian/headline_hyperparams.yaml
+      hash: md5
+      md5: 36dacc9ea7f250836f96c78a1a7c51b7
+      size: 742
+  wrangle_hierarchical_bayesian@ga_rebench:
+    cmd: python -m horizon.wrangle.bayesian hierarchical --fig-name ga_rebench 
+      --runs-file data/raw/runs.jsonl --output-logistic-fits-file 
+      data/wrangled/hierarchical_bayesian/ga_rebench.csv --release-dates 
+      ../../data/external/release_dates.yaml --output-metrics-file 
+      metrics/hierarchical_bayesian/ga_rebench.yaml 
+      --output-task-difficulty-file 
+      data/wrangled/hierarchical_bayesian/ga_rebench_task_difficulty.csv 
+      --output-hyperparams-file 
+      metrics/hierarchical_bayesian/ga_rebench_hyperparams.yaml 
+      --output-diagnostics-file 
+      metrics/hierarchical_bayesian/ga_rebench_diagnostics.yaml --n-samples 1000
+      --n-tune 1000 --n-chains 2 --target-accept 0.9 --random-seed 42 -v
+    deps:
+    - path: ../../data/external/release_dates.yaml
+      hash: md5
+      md5: 47a919cff55fbbd62241a82464ac741a
+      size: 2374
+    - path: ../../src/horizon/utils/bayesian_hierarchical.py
+      hash: md5
+      md5: 430e52e4b535efd8c4c8048726ec745a
+      size: 13599
+    - path: ../../src/horizon/wrangle/bayesian.py
+      hash: md5
+      md5: e8a3dc504ac55579263bf8f9903198a1
+      size: 30157
+    - path: data/raw/runs.jsonl
+      hash: md5
+      md5: 96633ce4202dc1d93ccfe9268143d203
+      size: 13105640
+    params:
+      params.yaml:
+        hierarchical_bayesian:
+          n_samples: 1000
+          n_tune: 1000
+          n_chains: 2
+          target_accept: 0.9
+          random_seed: 42
+      fig_params/figs.yaml:
+        figs.wrangle_logistic.ga_rebench:
+          runs_file: data/raw/runs.jsonl
+          weighting: invsqrt_task_weight
+          categories: ftr
+          regularization: 0.1
+          exclude:
+          - SWAA
+          success_percents:
+          - 50
+          confidence_level: 0.95
+    outs:
+    - path: data/wrangled/hierarchical_bayesian/ga_rebench.csv
+      hash: md5
+      md5: 7af91e47be7f26131c07933640d0d698
+      size: 2851
+    - path: data/wrangled/hierarchical_bayesian/ga_rebench_task_difficulty.csv
+      hash: md5
+      md5: 0202177d0fc21f64eababeafe4e029cb
+      size: 22407
+    - path: metrics/hierarchical_bayesian/ga_rebench.yaml
+      hash: md5
+      md5: c1063ab564258e5750c2f2feb52b647e
+      size: 2048
+    - path: metrics/hierarchical_bayesian/ga_rebench_diagnostics.yaml
+      hash: md5
+      md5: ef6319d98bdab7ec612c09ab135f799b
+      size: 3706
+    - path: metrics/hierarchical_bayesian/ga_rebench_hyperparams.yaml
+      hash: md5
+      md5: 0b576020d5b865148cedfcdcf37b4e39
+      size: 743
