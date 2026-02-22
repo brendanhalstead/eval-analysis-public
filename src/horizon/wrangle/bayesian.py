@@ -90,7 +90,7 @@ def _empirical_success_rates(
 def agent_bayesian_regression(
     x: np.ndarray[Any, Any],
     y: np.ndarray[Any, Any],
-    weights: np.ndarray[Any, Any],
+    weights: np.ndarray[Any, Any] | None,
     agent_name: str,
     prior: BayesianPrior,
     success_percents: list[int],
@@ -102,18 +102,24 @@ def agent_bayesian_regression(
 
     Returns a pd.Series with the same index structure as agent_regression()
     in wrangle/logistic.py, so downstream code works unchanged.
+
+    If weights is None, uses the true likelihood (each run = one observation).
+    If weights is provided, uses a pseudo-likelihood — caller is responsible
+    for the weight scale.
     """
     x_log = np.log2(x)
 
+    # For empirical rates display, use uniform weights if none provided
+    display_weights = weights if weights is not None else np.ones(len(y)) / len(y)
     empirical_rates, average_emp = None, None
     if include_empirical_rates:
-        empirical_rates, average_emp = _empirical_success_rates(x_log, y, weights)
+        empirical_rates, average_emp = _empirical_success_rates(x_log, y, display_weights)
 
     # Run the Bayesian model
     result = bayesian_logistic_regression(
         x,  # raw minutes — the function does log2 internally
         y,
-        weights,
+        weights=weights,  # None → unweighted (true likelihood)
         prior=prior,
         success_percents=success_percents,
         ci_level=confidence_level,
@@ -171,12 +177,24 @@ def run_bayesian_regressions(
     release_dates_file: pathlib.Path,
     wrangle_params: WrangleParams,
     prior: BayesianPrior | None = None,
+    use_weights: bool = False,
     include_empirical_rates: bool = True,
     n_grid: int = 150,
 ) -> pd.DataFrame:
     """Run Bayesian logistic regression for all agents.
 
     Drop-in replacement for run_logistic_regressions() in wrangle/logistic.py.
+
+    Parameters
+    ----------
+    use_weights : if False (default), uses the true likelihood — each run is
+        one observation, no weighting.  If True, uses the pseudo-likelihood
+        with METR's invsqrt_task_weight (or whatever wrangle_params["weighting"]
+        specifies).  Note: because these weights are normalized to sum to 1,
+        the pseudo-likelihood compresses all the data into ~1 unit of evidence.
+        This is equivalent to a very strong prior and yields extremely wide
+        credible intervals.  You almost certainly want use_weights=False
+        until the hierarchical model is implemented.
     """
     if prior is None:
         prior = BayesianPrior()
@@ -194,13 +212,17 @@ def run_bayesian_regressions(
     score_col = wrangle_params.get("score_col", "score_binarized")
     logger.info(
         f"Running Bayesian regressions for {len(runs)} runs "
-        f"(score_col={score_col}, n_grid={n_grid})"
+        f"(score_col={score_col}, n_grid={n_grid}, use_weights={use_weights})"
     )
 
     results = []
     runs = runs.rename(columns={"alias": "agent"})
     for agent, agent_runs in runs.groupby("agent", as_index=False):
-        weights = agent_runs[wrangle_params["weighting"]].values
+        weights = (
+            agent_runs[wrangle_params["weighting"]].values
+            if use_weights
+            else None
+        )
         regression = agent_bayesian_regression(
             agent_runs["human_minutes"].values,
             agent_runs[score_col].values,
@@ -269,7 +291,9 @@ def run_prior_sensitivity(
 
     x = np.log2(agent_runs["human_minutes"].values)
     y = agent_runs[score_col].values
-    w = agent_runs[wrangle_params["weighting"]].values
+
+    # Unweighted: each observation is one unit of evidence (true likelihood).
+    w = np.ones(len(y))
 
     return compare_priors(
         x, y, w,

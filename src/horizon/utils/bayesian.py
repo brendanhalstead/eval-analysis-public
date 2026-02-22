@@ -74,14 +74,34 @@ of Science"):
    normalization for free.  This enables principled prior sensitivity analysis
    via Bayes factors rather than ad hoc robustness checks.
 
-6. HIERARCHICAL EXTENSION (future).
+6. ON OBSERVATION WEIGHTS.
+
+   The existing pipeline uses 1/sqrt(n_tasks_in_family) weights normalized to
+   sum to 1.  Putting weights in the likelihood produces a pseudo-likelihood
+   Π p(y_i|θ)^{w_i}, which is not the probability of any event.  No choice
+   of weight normalization makes it a proper probability model — the scale of
+   the weights directly controls how much the data matters relative to the
+   prior, and there is no principled way to set that scale.
+
+   For the non-hierarchical model, the principled option is: don't use weights.
+   Each run is an observation; the likelihood is Π p(y_i|θ).  If large task
+   families dominate — that is the data you collected.
+
+   The proper solution to family-size imbalance is a hierarchical model (item 7
+   below), not a pseudo-likelihood hack.
+
+   This module defaults to unweighted observations.  A weighted pseudo-likelihood
+   mode is available when you pass weights explicitly, but you assume
+   responsibility for the weight scale and its consequences for the posterior.
+
+7. HIERARCHICAL EXTENSION (future — use PyMC / NumPyro, not hand-rolled MCMC).
 
    The 1/sqrt(n_tasks_in_family) weighting in the existing pipeline is an ad hoc
    approximation to what a hierarchical model does automatically.  A family
    random effect gamma_f ~ N(0, tau^2) would let each family's effective
-   contribution scale naturally with its information content (~sqrt(n) in the
-   balanced case), without manual tuning.  This requires MCMC for the
-   higher-dimensional posterior; the grid approach here is the foundation.
+   contribution scale naturally with its information content, with tau learned
+   from the data.  This requires MCMC for the higher-dimensional posterior;
+   use PyMC or NumPyro rather than reimplementing a sampler.
 """
 
 from __future__ import annotations
@@ -525,9 +545,6 @@ def compare_priors(
     if success_percents is None:
         success_percents = [50]
 
-    # Rescale weights so the likelihood reflects the actual information content
-    w = _rescale_weights(w)
-
     results: dict[str, dict[str, Any]] = {}
 
     for label, prior in priors.items():
@@ -570,35 +587,10 @@ def compare_priors(
 # ---------------------------------------------------------------------------
 
 
-def _rescale_weights(w: NDArray[Any]) -> NDArray[Any]:
-    """Rescale probability-measure weights to reflect effective sample size.
-
-    The METR pipeline normalizes weights to sum to 1.0 (a probability measure).
-    But in a Bayesian likelihood, each observation should contribute approximately
-    one unit of evidence.  With weights summing to 1.0, the entire dataset looks
-    like a single observation to the prior — which is why credible intervals
-    blow up.
-
-    We rescale so that the weights sum to the Kish effective sample size:
-
-        N_eff = (sum w_i)^2 / sum(w_i^2) = 1 / sum(w_i^2)
-
-    This preserves relative weighting while ensuring the total evidence reflects
-    the actual information content of the weighted sample.  (For uniform weights,
-    N_eff = N; for highly skewed weights, N_eff << N.)
-    """
-    w_sum = np.sum(w)
-    if w_sum == 0:
-        return w
-    w_normalized = w / w_sum
-    n_eff = 1.0 / np.sum(w_normalized**2)
-    return w_normalized * n_eff
-
-
 def bayesian_logistic_regression(
     x_raw: NDArray[Any],
     y: NDArray[Any],
-    weights: NDArray[Any],
+    weights: NDArray[Any] | None = None,
     prior: BayesianPrior | None = None,
     success_percents: list[int] | None = None,
     ci_level: float = 0.95,
@@ -613,9 +605,14 @@ def bayesian_logistic_regression(
     ----------
     x_raw : human_minutes (NOT log-transformed).
     y : scores in [0, 1]  (binary or continuous — no splitting needed).
-    weights : sample weights (from compute_task_weights).  These are
-        automatically rescaled so the total evidence reflects the Kish
-        effective sample size rather than being compressed to 1.
+    weights : observation weights for the log-likelihood.  If None (default
+        and recommended), each observation contributes equally — this is the
+        true likelihood and the only non-ad-hoc option for the non-hierarchical
+        model.  If provided, the weights are used AS-IS in the pseudo-likelihood
+        sum_i w_i * log p(y_i | theta).  The scale of these weights directly
+        controls the data-vs-prior balance, so the caller is responsible for
+        ensuring the scale is meaningful (e.g. unnormalized counts, NOT
+        probability-measure weights that sum to 1).
     prior : prior specification.  Uses principled defaults if None.
     success_percents : quantiles to compute horizons for, e.g. [50, 80].
     ci_level : credible interval level, e.g. 0.95.
@@ -637,7 +634,11 @@ def bayesian_logistic_regression(
         success_percents = [50, 80]
 
     x = np.log2(x_raw)
-    weights = _rescale_weights(weights)
+
+    # Default: uniform weights (each observation = 1 unit of evidence).
+    # This is the true likelihood.  See module docstring §6.
+    if weights is None:
+        weights = np.ones_like(y)
 
     # Handle degenerate case: agent never succeeds
     if np.all(y == 0):
