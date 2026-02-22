@@ -3,9 +3,10 @@
 ## Goal
 
 Implement the model comparison framework from `maxent-prior-derivations.md`:
-fit competing models (M0–M8) to the same data, compute LOO-CV and/or
-marginal likelihoods, and report Bayes factors.  Minimize code duplication
-by factoring shared structure out of model-specific code.
+fit competing models to the same data, compute Bayes factors where
+honest MaxEnt priors make them well-defined, and report posterior summaries
+for all models.  Minimize code duplication by factoring shared structure
+out of model-specific code.
 
 
 ## Design principles
@@ -39,7 +40,7 @@ src/horizon/
   utils/
     bayesian_hierarchical.py        # UNCHANGED — M0 lives here
     bayesian_models.py              # NEW — model component library + M1–M8
-    bayesian_comparison.py          # NEW — LOO-CV, comparison table
+    bayesian_comparison.py          # NEW — Bayes factors, posterior summaries
   wrangle/
     bayesian.py                     # MINOR CHANGE — add `compare` subcommand
 ```
@@ -51,9 +52,10 @@ src/horizon/
 - `bayesian_models.py` contains the model component library and competitor
   definitions.  It imports from `bayesian_hierarchical.py` to reuse
   `HierarchicalData` and `HierarchicalPrior`.
-- `bayesian_comparison.py` contains the comparison logic (fit N models,
-  compute LOO, format results).  It's separate from model definitions
-  because comparison logic doesn't change when you add a new model.
+- `bayesian_comparison.py` contains the comparison logic (fit models,
+  compute Bayes factors where eligible, format results).  It's separate
+  from model definitions because comparison logic doesn't change when
+  you add a new model.
 
 
 ## Module 1: `utils/bayesian_models.py`
@@ -141,6 +143,19 @@ Each builder is a function `build_M{n}(data) → pm.Model` that composes
 the shared components:
 
 ```python
+def build_M_base(data: HierarchicalData) -> pm.Model:
+    """Bare hierarchical — no residual, no discrimination."""
+    coords = {"family": data.family_ids, "task": data.task_ids, "agent": data.agent_names}
+    with pm.Model(coords=coords) as model:
+        mu_task = add_task_hierarchy(model, data)
+        add_human_obs(model, data, mu_task)
+        add_estimate_obs(model, data, mu_task)
+        alpha, beta = add_agent_slopes(model, data)
+        eta = alpha[data.agent_agent_idx] + beta[data.agent_agent_idx] * mu_task[data.agent_task_idx]
+        pm.Bernoulli("agent_obs", p=pm.math.sigmoid(eta), observed=data.agent_scores)
+    return model
+
+
 def build_M0(data: HierarchicalData) -> pm.Model:
     """Hierarchical, additive residual (current model with honest priors)."""
     coords = {"family": data.family_ids, "task": data.task_ids, "agent": data.agent_names}
@@ -181,21 +196,67 @@ def build_M1(data: HierarchicalData) -> pm.Model:
 
 ### Model registry
 
+Each entry records: the builder function, and whether all model-specific
+parameters have proper MaxEnt priors (needed for Bayes factors).
+
 ```python
-MODEL_REGISTRY: dict[str, Callable[[HierarchicalData], pm.Model]] = {
-    "M0_hierarchical_residual": build_M0,
-    "M1_discrimination": build_M1,
-    "M2_both": build_M2,
-    "M3_probit": build_M3,
-    "M4_estimate_bias": build_M4,
-    "M5_per_source_sigma": build_M5,
-    "M6_flat": build_M6,
-    "M8_irt": build_M8,
+@dataclass
+class ModelSpec:
+    builder: Callable[[HierarchicalData], pm.Model]
+    proper_model_priors: bool  # True → eligible for Bayes factor computation
+
+
+MODEL_REGISTRY: dict[str, ModelSpec] = {
+    "M_base":                   ModelSpec(build_M_base, proper_model_priors=True),
+    "M0_hierarchical_residual": ModelSpec(build_M0,     proper_model_priors=False),  # σ_ε: Jeffreys
+    "M1_discrimination":        ModelSpec(build_M1,     proper_model_priors=True),   # a_i: Exp(1)
+    "M2_both":                  ModelSpec(build_M2,     proper_model_priors=False),  # σ_ε: Jeffreys
+    "M3_probit":                ModelSpec(build_M3,     proper_model_priors=False),  # σ_ε: Jeffreys
+    "M4_estimate_bias":         ModelSpec(build_M4,     proper_model_priors=False),  # δ: flat
+    "M5_per_source_sigma":      ModelSpec(build_M5,     proper_model_priors=False),  # σ_HCAST, σ_SWAA: Jeffreys
+    "M6_flat":                  ModelSpec(build_M6,     proper_model_priors=False),  # σ_ε: Jeffreys
+    "M8_irt":                   ModelSpec(build_M8,     proper_model_priors=False),  # σ_θ: Jeffreys
 }
 ```
 
-This lets the comparison runner iterate over models by name without
-hard-coding which models exist.
+The comparison runner uses `proper_model_priors` to decide which pairs
+are eligible for Bayes factor computation.  A pair (Mi, Mj) has a
+well-defined BF when:
+
+1. Both have `proper_model_priors=True`, **or**
+2. They share identical parameters and priors (differ only in functional
+   form, e.g., link function) — encoded via a `shared_params_group` tag.
+
+For case 2, we need a second flag.  Models in the same `shared_params_group`
+have identical parameter sets and priors, differing only in structural
+form (e.g., link function):
+
+```python
+@dataclass
+class ModelSpec:
+    builder: Callable[[HierarchicalData], pm.Model]
+    proper_model_priors: bool
+    shared_params_group: str | None = None  # models in same group have identical params
+
+
+MODEL_REGISTRY: dict[str, ModelSpec] = {
+    "M_base":                   ModelSpec(build_M_base, True,  None),
+    "M0_hierarchical_residual": ModelSpec(build_M0,     False, "hierarchical_residual"),
+    "M1_discrimination":        ModelSpec(build_M1,     True,  None),
+    "M2_both":                  ModelSpec(build_M2,     False, None),
+    "M3_probit":                ModelSpec(build_M3,     False, "hierarchical_residual"),  # same params as M0
+    "M4_estimate_bias":         ModelSpec(build_M4,     False, None),
+    "M5_per_source_sigma":      ModelSpec(build_M5,     False, None),
+    "M6_flat":                  ModelSpec(build_M6,     False, None),
+    "M8_irt":                   ModelSpec(build_M8,     False, None),
+}
+```
+
+**BF eligibility rule**: BF(Mi, Mj) is well-defined iff:
+- `Mi.proper_model_priors and Mj.proper_model_priors`, or
+- `Mi.shared_params_group == Mj.shared_params_group` (and not None)
+
+This is computed at runtime from the registry — no hardcoded model pairs.
 
 ### How to add a new model
 
@@ -204,10 +265,13 @@ Adding a model requires exactly two changes in one file (`bayesian_models.py`):
 1. **Write a builder function.**  It takes `HierarchicalData`, returns
    `pm.Model`.  Compose from the shared components above — or don't, if
    the model is structurally different.  The only contract is: the model
-   must include a `pm.Bernoulli("agent_obs", ...)` observed variable (so
-   LOO-CV has something to compare).
+   must include a `pm.Bernoulli("agent_obs", ...)` observed variable.
 
-2. **Add one line to `MODEL_REGISTRY`.**
+2. **Add one entry to `MODEL_REGISTRY`**, setting:
+   - `proper_model_priors=True` if every model-specific parameter has
+     a proper MaxEnt prior derived from honest constraints.
+   - `shared_params_group` if the model has identical parameters to
+     another model (differing only in functional form like link function).
 
 ```python
 # Example: adding a new M9 with per-family discrimination
@@ -225,8 +289,8 @@ def build_M9(data: HierarchicalData) -> pm.Model:
         pm.Bernoulli("agent_obs", p=pm.math.sigmoid(eta), observed=data.agent_scores)
     return model
 
-# Then add to registry:
-MODEL_REGISTRY["M9_family_discrimination"] = build_M9
+# Exponential(1) is proper → eligible for BF
+MODEL_REGISTRY["M9_family_discrimination"] = ModelSpec(build_M9, proper_model_priors=True)
 ```
 
 Nothing else changes — the comparison runner, CLI, and DVC stage all
@@ -237,8 +301,32 @@ builder function and its registry entry.  To run a *subset*, pass
 
 ## Module 2: `utils/bayesian_comparison.py`
 
+### Core functions
+
 ```python
-def compare_models(
+def bf_eligible_pairs(
+    model_names: list[str],
+) -> list[tuple[str, str]]:
+    """Return all (Mi, Mj) pairs with well-defined Bayes factors.
+
+    A pair is eligible iff:
+    - Both have proper_model_priors=True, OR
+    - Both share the same shared_params_group (not None)
+    """
+    pairs = []
+    for i, name_i in enumerate(model_names):
+        spec_i = MODEL_REGISTRY[name_i]
+        for name_j in model_names[i + 1:]:
+            spec_j = MODEL_REGISTRY[name_j]
+            if spec_i.proper_model_priors and spec_j.proper_model_priors:
+                pairs.append((name_i, name_j))
+            elif (spec_i.shared_params_group is not None
+                  and spec_i.shared_params_group == spec_j.shared_params_group):
+                pairs.append((name_i, name_j))
+    return pairs
+
+
+def fit_models(
     data: HierarchicalData,
     model_names: list[str] | None = None,
     n_samples: int = 1000,
@@ -246,82 +334,94 @@ def compare_models(
     n_chains: int = 2,
     target_accept: float = 0.9,
     random_seed: int = 42,
-) -> pd.DataFrame:
-    """Fit multiple models and compare via LOO-CV.
-
-    Parameters
-    ----------
-    data : prepared HierarchicalData (same for all models)
-    model_names : which models to fit (default: all in registry)
-
-    Returns
-    -------
-    DataFrame with columns:
-        model, elpd_loo, se_loo, p_loo, n_params, n_warnings,
-        delta_elpd (vs best), se_delta, weight (stacking or pseudo-BMA)
-    """
-```
-
-Implementation:
-
-1. For each model name, call `MODEL_REGISTRY[name](data)` to build it.
-2. Sample with `pm.sample(...)`.
-3. Compute `az.loo(idata)` (PSIS-LOO).
-4. Collect results into a DataFrame.
-5. Call `az.compare({"M0": idata_m0, "M1": idata_m1, ...})` for the
-   comparison table with stacking weights.
-
-```python
-def compare_models(...) -> pd.DataFrame:
-    import arviz as az
-
+) -> dict[str, az.InferenceData]:
+    """Fit multiple models and return their InferenceData objects."""
     if model_names is None:
         model_names = list(MODEL_REGISTRY.keys())
 
     idatas = {}
     for name in model_names:
-        builder = MODEL_REGISTRY[name]
-        model = builder(data)
+        spec = MODEL_REGISTRY[name]
+        model = spec.builder(data)
         with model:
             idata = pm.sample(
                 draws=n_samples, tune=n_tune, chains=n_chains,
                 target_accept=target_accept, random_seed=random_seed,
                 compute_convergence_checks=True,
             )
-            # LOO needs log-likelihood; tell PyMC to compute it
-            pm.compute_log_likelihood(idata)
         idatas[name] = idata
+    return idatas
 
-    comparison = az.compare(idatas, ic="loo", scale="log")
-    return comparison
+
+def compute_bayes_factors(
+    idatas: dict[str, az.InferenceData],
+) -> pd.DataFrame:
+    """Compute Bayes factors for all eligible model pairs.
+
+    Returns a DataFrame with columns:
+        model_i, model_j, log10_bf, method, eligible_reason
+    """
+    model_names = list(idatas.keys())
+    eligible = bf_eligible_pairs(model_names)
+
+    results = []
+    for name_i, name_j in eligible:
+        spec_i = MODEL_REGISTRY[name_i]
+        spec_j = MODEL_REGISTRY[name_j]
+
+        if (spec_i.shared_params_group is not None
+                and spec_i.shared_params_group == spec_j.shared_params_group):
+            # Same parameters, different structure → bridge sampling
+            log10_bf = _bridge_sampling_bf(idatas[name_i], idatas[name_j])
+            reason = f"shared_params_group={spec_i.shared_params_group}"
+            method = "bridge_sampling"
+        else:
+            # Both proper → bridge sampling (or Savage-Dickey if nested)
+            log10_bf = _bridge_sampling_bf(idatas[name_i], idatas[name_j])
+            reason = "both_proper_model_priors"
+            method = "bridge_sampling"
+
+        results.append({
+            "model_i": name_i,
+            "model_j": name_j,
+            "log10_bf": log10_bf,
+            "method": method,
+            "eligible_reason": reason,
+        })
+
+    return pd.DataFrame(results)
 ```
 
-The `az.compare` output is already a well-formatted DataFrame with
-exactly the columns we want (rank, elpd_loo, p_loo, d_loo, weight, se,
-dse, warning, scale).
+### Bridge sampling
 
-### Important: `compute_log_likelihood`
+For models with different parameters (e.g., M_base vs M1), we need to
+estimate individual marginal likelihoods.  Bridge sampling (Gronau et al.,
+2017) estimates log p(data | M) from posterior samples.  ArviZ has
+experimental support; if it's not reliable enough, use the `bridgesampling`
+package or implement stepping-stone sampling.
 
-For PSIS-LOO to work, the InferenceData must contain pointwise
-log-likelihood values.  PyMC can compute these automatically if the
-observed variables are named consistently.  The `pm.compute_log_likelihood`
-call (or `idata_kwargs={"log_likelihood": True}` in `pm.sample`) handles
-this.  All our models use `pm.Bernoulli("agent_obs", ...)` for the agent
-scores and `pm.Normal("human_obs", ...)` / `pm.Normal("estimate_obs", ...)`
-for the observation models, so the pointwise log-likelihood decomposes
-naturally.
-
-**Which observations to LOO over?**  We want to compare how well models
-predict *agent scores*, not human durations.  So the LOO should be
-computed over the `agent_obs` variable only.  ArviZ's `az.loo` accepts
-a `var_name` parameter for this:
+For **M_base vs M1** specifically, we could also use the Savage-Dickey
+density ratio (M_base is nested in M1 by setting a_i = 1 for all i),
+which only requires fitting M1:
 
 ```python
-az.loo(idata, var_name="agent_obs")
+# Savage-Dickey: BF(M_base, M1) = p(a=1 | data, M1) / p(a=1 | M1)
+# p(a=1 | M1) = Exp(1) evaluated at 1 = e^{-1} ≈ 0.368
+# p(a=1 | data, M1) = estimated from posterior samples via KDE
 ```
 
-This ensures we're comparing models on their ability to predict agent
-success, holding the human observation model fixed.
+### What the comparison runner does NOT do
+
+- **No LOO-CV.**  LOO-CV answers "which model predicts best?" (a
+  frequentist question about posterior predictive accuracy).  We want
+  "which model does the data support?" (a Bayesian question about prior
+  × likelihood).  Substituting one for the other would dodge the prior
+  question rather than confronting it.
+
+- **No Bayes factors for ineligible pairs.**  If a model has
+  `proper_model_priors=False` and isn't in the same `shared_params_group`
+  as its comparison partner, the BF is undefined.  The code reports this
+  explicitly rather than computing a substitute.
 
 
 ## Module 3: changes to `wrangle/bayesian.py`
@@ -330,7 +430,7 @@ Add a third subcommand `compare` alongside `grid` and `hierarchical`:
 
 ```python
 # In get_parser():
-comp = sub.add_parser("compare", help="Compare competing model structures via LOO-CV")
+comp = sub.add_parser("compare", help="Fit competing models and compute Bayes factors")
 comp.add_argument("--fig-name", type=str, required=True)
 comp.add_argument("--runs-file", type=pathlib.Path, required=True)
 comp.add_argument("--output-comparison-file", type=pathlib.Path, required=True)
@@ -350,9 +450,11 @@ The `main_compare` function:
 def main_compare(fig_name, runs_file, output_comparison_file, models, ...):
     # 1. Load data (same as hierarchical)
     # 2. prepare_hierarchical_data(runs, ...)
-    # 3. compare_models(data, model_names=models, ...)
-    # 4. Save comparison DataFrame to CSV
-    # 5. Save summary to YAML (for DVC metrics)
+    # 3. fit_models(data, model_names=models, ...)
+    # 4. compute_bayes_factors(idatas) — only for eligible pairs
+    # 5. Save BF results + posterior summaries to CSV
+    # 6. Save summary to YAML (for DVC metrics)
+    # 7. Log which pairs were eligible and which weren't
 ```
 
 
@@ -367,7 +469,7 @@ compare_bayesian_models:
     --runs-file data/raw/runs.jsonl
     --output-comparison-file data/wrangled/model_comparison/headline.csv
     --output-summary-file metrics/model_comparison/headline.yaml
-    --models M0_hierarchical_residual M1_discrimination M6_flat M8_irt
+    --models M_base M0_hierarchical_residual M1_discrimination M3_probit
     --n-samples ${hierarchical_bayesian.n_samples}
     --n-tune ${hierarchical_bayesian.n_tune}
     --n-chains ${hierarchical_bayesian.n_chains}
@@ -389,8 +491,16 @@ compare_bayesian_models:
   metrics:
   - metrics/model_comparison/headline.yaml:
       cache: false
-  desc: Compare competing Bayesian model structures via PSIS-LOO-CV.
+  desc: >
+    Fit competing Bayesian models and compute Bayes factors where
+    honest MaxEnt priors make them well-defined.
 ```
+
+With `M_base M0 M1 M3`, the eligible BF pairs are:
+- M_base vs M1 (both `proper_model_priors=True`) — does discrimination help?
+- M0 vs M3 (same `shared_params_group`) — logistic vs probit?
+
+Other pairs (e.g., M_base vs M0) are reported as ineligible.
 
 This stage is independent of `wrangle_hierarchical_bayesian` — they
 can run in parallel.  The comparison stage is expensive (~N× the cost
@@ -400,31 +510,34 @@ not on every pipeline invocation.
 
 ## What NOT to build
 
-- **Bridge sampling**: ArviZ's implementation is experimental and unreliable.
-  Use LOO-CV only.  If the LOO comparison is ambiguous, report that —
-  don't reach for a less-tested method.
+- **LOO-CV / WAIC**: These answer "which model predicts best?" — a
+  frequentist predictive-accuracy question.  We want Bayes factors,
+  which answer "which model does the data support?"  Including both
+  would invite confusion about which to trust when they disagree.
+- **Bayes factors for ineligible pairs**: Don't make priors proper just
+  to get a BF.  If the honest MaxEnt prior is improper, the BF is
+  undefined.  Report this, don't paper over it.
 - **M7 (feature regression)**: Requires defining task features, which is a
   data question, not a modeling question.  Defer until someone specifies
   what features to use.
-- **Plotting of comparison results**: The `az.compare` DataFrame is
-  self-explanatory.  A plot can be added later if anyone wants one.
+- **Plotting of comparison results**: The BF table is self-explanatory.
+  A plot can be added later if anyone wants one.
 - **Refactoring `bayesian_hierarchical.py`**: Leave it alone.  The new
   `bayesian_models.py` reimplements M0 with honest priors alongside the
   competitors.  The existing code continues to work for the existing
-  pipeline.  If M0-with-honest-priors produces different results from
-  the current M0-with-HalfNormal-priors, that's interesting and worth
-  reporting, not hiding.
+  pipeline.
 
 
 ## Implementation order
 
-1. **`utils/bayesian_models.py`** — shared components + model builders.
-   Start with M0 and M6 (the simplest structural comparison: hierarchy
-   vs. flat).  Add M1 and M8 next.  Leave M2/M3/M5 for later — they're
-   less interesting.
+1. **`utils/bayesian_models.py`** — `ModelSpec` dataclass, shared
+   components, model builders.  Start with M_base, M0, M1, and M3
+   (the set that yields two defined BF comparisons).  Add remaining
+   models as stubs for posterior-only fitting.
 
-2. **`utils/bayesian_comparison.py`** — the comparison runner.  Small
-   module, mostly wrapping `az.compare`.
+2. **`utils/bayesian_comparison.py`** — `bf_eligible_pairs()`,
+   `fit_models()`, `compute_bayes_factors()`.  Bridge sampling
+   implementation (or wrapper around external library).
 
 3. **`wrangle/bayesian.py`** — add the `compare` subcommand.
 
@@ -437,14 +550,13 @@ not on every pipeline invocation.
 
 ## Estimated parameter counts (for runtime planning)
 
-| Model | Parameters | Notes |
-|-------|-----------|-------|
-| M0 | ~250 | 170 μ_task + 170 ε + 33×2 α,β + ~6 hyper |
-| M1 | ~250 | 170 μ_task + 170 a + 33×2 α,β + ~5 hyper |
-| M6 | ~240 | 170 μ_task + 170 ε + 33×2 α,β + ~3 hyper (no family) |
-| M8 | ~210 | 170 μ_task + 170 a + 33 θ + ~5 hyper |
+| Model | Parameters | BF-eligible? | Notes |
+|-------|-----------|-------------|-------|
+| M_base | ~80 | Yes (proper) | 170 μ_task + 33×2 α,β + ~5 hyper |
+| M0 | ~250 | Only vs M3 (shared group) | + 170 ε + 1 σ_ε |
+| M1 | ~250 | Yes (proper) | + 170 a (Exp(1)) |
+| M3 | ~250 | Only vs M0 (shared group) | Same as M0, probit link |
 
 All are within PyMC/NUTS capacity.  Expect ~5–15 minutes per model
 with 1000 draws × 2 chains on a single CPU.  Running 4 models takes
-~20–60 minutes total — not fast, but not prohibitive for a DVC stage
-that runs once.
+~20–60 minutes total.

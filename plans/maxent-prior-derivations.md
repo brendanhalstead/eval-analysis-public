@@ -291,6 +291,29 @@ applies to ALL agents.
 additive shift in log-odds, the same for all agents.
 
 
+### M_base: Bare hierarchical (no residual, no discrimination)
+
+```
+# Task difficulty hierarchy (same as M0)
+μ_global    ~ Normal(6, 9)
+σ_global    ~ p(σ) ∝ 1/σ
+μ_family_f  ~ Normal(μ_global, σ_global)
+σ_family    ~ p(σ) ∝ 1/σ
+μ_task_i    ~ Normal(μ_family[f(i)], σ_family)
+
+# Agent success model — bare linear predictor, no extras
+η_ai = α_a + β_a · μ_task_i
+score_ai ~ Bernoulli(logistic(η_ai))
+```
+
+No model-specific parameters.  The simplest hierarchical model: task
+difficulty drives agent success through a linear predictor, nothing else.
+
+**Purpose**: Baseline for Bayes factor comparisons.  Since M_base adds
+no model-specific parameters beyond the shared block, BF(M_base, Mx) is
+well-defined whenever Mx's unique parameters all have proper priors.
+
+
 ### M1: Per-task discrimination (2PL)
 
 ```
@@ -564,72 +587,144 @@ how much prior mass each wastes on regions of parameter space the data
 don't support.
 
 
-## 3. Which comparisons to actually run
+## 3. Which Bayes factors are well-defined?
 
-Not all pairs are interesting.  Organize by what hypothesis each comparison
-tests:
+A Bayes factor BF(Mi, Mj) is well-defined when every parameter unique
+to one model has a proper prior.  Shared parameters with identical
+(even improper) priors cancel in the ratio.  Model-specific parameters
+with improper priors make the Bayes factor undefined — not "hard to
+compute," literally not a number.
 
-**Does hierarchy help?**
-```
-M0 (hierarchical) vs. M6 (flat) vs. M7 (feature regression)
-```
-Tests whether family-level partial pooling, independent task priors, or
-explicit features best explain the task difficulty structure.
+### Model-specific parameters and their priors
 
-**How do tasks affect agents?**
-```
-M0 (additive residual) vs. M1 (multiplicative discrimination) vs. M2 (both)
-```
-Tests whether AI-specific task difficulty is additive (same log-odds shift
-for all agents) or multiplicative (some tasks more diagnostic than others).
+| Model | Parameters unique to this model | Prior | Proper? |
+|-------|-------------------------------|-------|---------|
+| M_base | (none beyond shared block) | — | n/a |
+| M0 | σ_ε, ε_i | Jeffreys on σ_ε | **No** |
+| M1 | a_i (discrimination) | Exponential(1) | **Yes** — E[a]=1 is scale identification |
+| M2 | a_i + σ_ε + ε_i | Exp(1) + Jeffreys | **No** (σ_ε) |
+| M3 | (same as M0, different link) | Jeffreys on σ_ε | **No** |
+| M4 | δ (estimate bias) | Flat on ℝ | **No** |
+| M5 | σ_HCAST, σ_SWAA (replace σ_human) | Jeffreys × 2 | **No** |
+| M6 | (lacks σ_global, σ_family from hierarchical models) | — | see below |
+| M7 | σ_γ, σ_ν + γ coefficients | Jeffreys × 2 | **No** |
+| M8 | σ_θ, θ_a, a_i (replace α, β) | Jeffreys on σ_θ | **No** |
 
-**How are agents parameterized?**
-```
-M0 (per-agent α, β) vs. M8 (scalar ability θ + per-task discrimination)
-```
-Tests whether agents differ in a single dimension (ability) or two
-dimensions (intercept + slope).
+"Unique to this model" means relative to the shared block.  When
+comparing two specific models, parameters shared between them cancel
+regardless of properness.
 
-**Link function:**
-```
-M0 vs. M3 (probit)
-```
-Probably uninteresting — logistic and probit are nearly indistinguishable
-except in the tails.
+### Well-defined Bayes factors
 
-**Observation model refinements (orthogonal, can combine freely):**
-```
-M4 (estimate bias) — are expert estimates systematically off?
-M5 (per-source σ) — do HCAST and SWAA have different timing noise?
-```
+**BF(M0, M3)** — logistic vs. probit link.
+M0 and M3 have identical parameters (including σ_ε).  All priors cancel.
+The Bayes factor compares only the functional form of the link.
+Defined. ✓
 
-The most consequential comparisons are M0 vs. M6 (hierarchy worth it?),
-M0 vs. M1 (additive vs. multiplicative), and M0 vs. M8 (per-agent slopes
-vs. scalar ability).
+**BF(M_base, M1)** — does per-task discrimination help?
+M_base has no unique parameters.  M1 adds a_i ~ Exponential(1) (proper).
+All shared parameters (hierarchy, observation models, α, β) cancel.
+Defined. ✓
+
+### Undefined Bayes factors (and why)
+
+**M0 vs. M1** (residual vs. discrimination): σ_ε in M0 is Jeffreys
+(improper), unique to M0.  We have no honest constraint on E[σ_ε]
+that would make it proper.  Undefined.
+
+**M0 vs. M6** (hierarchy vs. flat): σ_global and σ_family appear only
+in M0 (and other hierarchical models), both Jeffreys.  Undefined.
+
+**Anything vs. M8** (IRT scalar ability): σ_θ is Jeffreys.  We can
+identify the scale via E[a]=1 OR σ_θ=1, but not both (one degree of
+freedom).  Either way one improper prior remains.  Undefined.
+
+**M0 vs. M4** (unbiased vs. biased estimates): δ is flat (improper).
+No honest constraint on expert estimation bias magnitude.  Undefined.
+
+**M0 vs. M5** (shared vs. per-source σ_human): M5 replaces one
+Jeffreys parameter with two.  The priors don't cancel.  Undefined.
+
+### What this means
+
+The most structurally interesting comparisons — hierarchy vs. flat,
+residual vs. discrimination, slopes vs. scalar ability — are all
+formally undecidable with our honest priors.  This is not a failure of
+the method.  It reflects a genuine epistemic fact: we don't have enough
+prior information about model-specific scale parameters to say how much
+Occam penalty each model deserves.
+
+The two comparisons that ARE defined test narrower questions:
+- Is the logistic link better than probit? (Almost certainly uninformative.)
+- Does adding per-task discrimination to a bare model improve predictions?
+
+For the undefined comparisons, we can still:
+- Fit all models and inspect posteriors.
+- Do posterior predictive checks (does the model reproduce observed patterns?).
+- Report the posteriors honestly and let readers judge qualitatively.
+
+But we should not substitute a different metric (LOO-CV, WAIC, etc.)
+and pretend it answers the same question as Bayes factors.  It doesn't.
+LOO-CV measures posterior predictive accuracy — a frequentist concept
+that doesn't depend on priors.  Bayes factors measure which model the
+data support given the priors.  They answer different questions.
 
 
-## 4. Computing the marginal likelihood
+## 4. Computing Bayes factors
 
-For PyMC models, the marginal likelihood is not available in closed form.
-Options:
+### Why not LOO-CV?
 
-**Bridge sampling** (recommended): The `bridgesampling` approach (Gronau
-et al., 2017) estimates log p(data | model) from posterior samples with
-good accuracy.  The ArviZ library has experimental support; alternatively,
-use the `harmonic mean estimator` (unstable) or `stepping-stone sampling`
-(accurate but expensive).
+LOO-CV (PSIS-LOO via ArviZ) estimates posterior predictive accuracy.
+It's well-defined even with improper priors, which makes it tempting as
+a substitute for Bayes factors.  But it answers a different question:
+"which model predicts held-out data best?" rather than "which model does
+the data support?"  The Bayesian question is the latter, and it requires
+marginal likelihoods, which require proper priors on model-specific
+parameters.  Substituting LOO-CV would dodge the prior question rather
+than confronting it.
 
-**LOO-CV** (practical alternative): Leave-one-out cross-validation via
-Pareto-smoothed importance sampling (PSIS-LOO, Vehtari et al., 2017) is
-implemented in ArviZ as `az.loo()`.  It approximates the expected log
-pointwise predictive density (ELPD), which is closely related to the
-marginal likelihood for well-specified models.  It's model-comparison
-without explicit prior dependence — but this means it doesn't test the
-prior specification, only the likelihood structure.
+### How to compute Bayes factors for the eligible pairs
 
-**Recommendation**: Use LOO-CV (PSIS-LOO via ArviZ) for practical model
-comparison, and bridge sampling for the principled Bayesian comparison
-where prior choice matters.  If the two methods agree, the result is robust.
+For models where all model-specific parameters have proper priors (see
+§3), the Bayes factor BF(Mi, Mj) = p(data | Mi) / p(data | Mj).
+
+Individual marginal likelihoods p(data | M) are not available in closed
+form for our PyMC models.  Options for estimating them:
+
+1. **Bridge sampling** (Gronau et al., 2017): Estimates log p(data | M)
+   from posterior samples.  Good accuracy when the proposal distribution
+   is well-chosen.  ArviZ has experimental support.
+
+2. **Stepping-stone sampling** (Xie et al., 2011): More robust than
+   bridge sampling, but expensive (requires sampling from a sequence of
+   power posteriors).
+
+3. **Savage-Dickey density ratio** (for nested models): When Mi is
+   nested within Mj by restricting θ_extra = θ_0, the Bayes factor is
+   BF = p(θ_extra = θ_0 | data, Mj) / p(θ_extra = θ_0 | Mj).  This
+   only requires samples from the more complex model.
+
+For **BF(M_base, M1)**: M_base is nested in M1 by setting a_i = 1 for
+all tasks.  The Savage-Dickey ratio computes BF from M1's posterior
+and prior on the discrimination parameters, without needing to fit
+M_base separately.
+
+For **BF(M0, M3)**: These are non-nested (different link functions,
+same parameters).  Bridge sampling is the appropriate method.
+
+### Interpretation
+
+Report log₁₀ BF with the Kass & Raftery (1995) scale:
+
+| |log₁₀ BF| | Evidence |
+|------------|----------|
+| 0 – 0.5 | Not worth more than a bare mention |
+| 0.5 – 1 | Substantial |
+| 1 – 2 | Strong |
+| > 2 | Decisive |
+
+If the Bayes factor is close to 1 (|log₁₀ BF| < 0.5), report that
+the data don't distinguish the models.  This is a valid finding.
 
 
 ## 5. Where the current priors diverge from honest MaxEnt
@@ -687,9 +782,12 @@ would be cleaner.
    For discrimination a_i: Exponential(1) (E[a] = 1 is a scale convention,
    not data-derived).  For bias δ: flat (we don't know the sign or magnitude).
 
-6. **Compute marginal likelihoods (or LOO-CV) and compare.**  The Bayes factor
-   is the right summary.  If |log K| < 1, the data don't distinguish the
-   models.  Report this honestly — "the data can't tell" is a valid finding.
+6. **Compute Bayes factors where defined.**  Only model pairs where all
+   model-specific parameters have proper MaxEnt priors yield well-defined
+   Bayes factors.  For other pairs, report posterior fits and predictive
+   checks, but do not substitute LOO-CV or other metrics that dodge the
+   prior question.  If |log₁₀ BF| < 0.5, report that the data don't
+   distinguish the models.
 
 7. **Do a prior sensitivity check.**  For any constraint you weren't fully
    sure about, vary it and check that the Bayes factors are stable.  If
