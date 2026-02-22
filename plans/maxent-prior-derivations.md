@@ -702,12 +702,18 @@ form for our PyMC models.  Options for estimating them:
 3. **Savage-Dickey density ratio** (for nested models): When Mi is
    nested within Mj by restricting θ_extra = θ_0, the Bayes factor is
    BF = p(θ_extra = θ_0 | data, Mj) / p(θ_extra = θ_0 | Mj).  This
-   only requires samples from the more complex model.
+   only requires samples from the more complex model.  **Caveat**: this
+   requires estimating the joint posterior density at a single point.
+   For scalar or low-dimensional restrictions this works well.  For
+   high-dimensional restrictions (e.g., 170 discrimination parameters
+   all equal to 1) it's impractical — you can't estimate a
+   170-dimensional density from MCMC samples.
 
 For **BF(M_base, M1)**: M_base is nested in M1 by setting a_i = 1 for
-all tasks.  The Savage-Dickey ratio computes BF from M1's posterior
-and prior on the discrimination parameters, without needing to fit
-M_base separately.
+all 170 tasks.  In principle Savage-Dickey applies, but estimating the
+joint posterior density at the 170-dimensional point (1, 1, ..., 1)
+is not feasible.  Use bridge sampling instead (fit both models, estimate
+each marginal likelihood separately, take the ratio).
 
 For **BF(M0, M3)**: These are non-nested (different link functions,
 same parameters).  Bridge sampling is the appropriate method.

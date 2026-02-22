@@ -394,21 +394,19 @@ def compute_bayes_factors(
 
 ### Bridge sampling
 
-For models with different parameters (e.g., M_base vs M1), we need to
-estimate individual marginal likelihoods.  Bridge sampling (Gronau et al.,
-2017) estimates log p(data | M) from posterior samples.  ArviZ has
-experimental support; if it's not reliable enough, use the `bridgesampling`
-package or implement stepping-stone sampling.
+For both eligible pairs, we estimate each model's marginal likelihood
+separately via bridge sampling (Gronau et al., 2017), then take the
+ratio.  Bridge sampling estimates log p(data | M) from posterior samples
+using an iterative scheme that constructs an optimal bridge distribution
+between prior and posterior.  ArviZ has experimental support; if it's
+not reliable enough, use the `bridgesampling` package or implement
+stepping-stone sampling.
 
-For **M_base vs M1** specifically, we could also use the Savage-Dickey
-density ratio (M_base is nested in M1 by setting a_i = 1 for all i),
-which only requires fitting M1:
-
-```python
-# Savage-Dickey: BF(M_base, M1) = p(a=1 | data, M1) / p(a=1 | M1)
-# p(a=1 | M1) = Exp(1) evaluated at 1 = e^{-1} ≈ 0.368
-# p(a=1 | data, M1) = estimated from posterior samples via KDE
-```
+Note: M_base is technically nested in M1 (set a_i = 1 for all tasks),
+so the Savage-Dickey density ratio could apply in principle.  But it
+requires estimating the 170-dimensional joint posterior density at
+(1, 1, ..., 1), which is infeasible from MCMC samples.  Bridge sampling
+is the practical method for both pairs.
 
 ### What the comparison runner does NOT do
 
