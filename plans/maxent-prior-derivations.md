@@ -390,21 +390,28 @@ P(success) = Φ(η_ai)         # standard normal CDF instead of logistic
 score_ai ~ Bernoulli(P)
 ```
 
-Everything else identical to M0.  The ONLY difference is the link function.
+The parameter names and prior distributions are the same as M0.  But the
+parameters have **different meaning** because the link functions have
+different scales: logistic(η) ≈ Φ(η · √3/π) ≈ Φ(0.55·η).  A slope
+β = -1 in the logistic model corresponds to roughly β ≈ -0.55 in the
+probit model in terms of effect on probabilities.  So "same prior on β"
+is not "same prior belief about how difficulty affects success."
+
+This means the priors do NOT cancel in a Bayes factor — even though
+both models use β ~ Uniform(-50, 0), this encodes different prior
+beliefs about the probability-scale relationship.  **BF(M0, M3) is
+not well-defined** without rescaling the probit priors.
 
 **Jaynesian argument for logistic over probit**: The logistic function is
 the maximum entropy distribution on {0, 1} given the linear predictor η
 (Jaynes Ch. 11).  The probit assumes a latent Gaussian threshold model
 (Y = 1 iff Z > 0, Z ~ N(η, 1)), which is an additional structural
-assumption beyond what the data require.
+assumption beyond what the data require.  On Jaynesian grounds, the
+logistic is the default; probit requires justification.
 
-However: both are nearly indistinguishable for moderate η, differing mainly
-in the tails (logistic has heavier tails).  If the data contain many
-observations in the tails (tasks where success is near 0% or near 100%),
-the comparison will be informative.  Otherwise, the Bayes factor will be
-close to 1 — the data can't tell them apart.
-
-**No new parameters.  No new priors.**  This is a pure structural comparison.
+**No new parameters, but priors are not equivalent.**  This is not a
+pure structural comparison — the link function changes what the
+parameters mean.
 
 
 ### M4: Estimate bias
@@ -603,7 +610,7 @@ compute," literally not a number.
 | M0 | σ_ε, ε_i | Jeffreys on σ_ε | **No** |
 | M1 | a_i (discrimination) | Exponential(1) | **Yes** — E[a]=1 is scale identification |
 | M2 | a_i + σ_ε + ε_i | Exp(1) + Jeffreys | **No** (σ_ε) |
-| M3 | (same as M0, different link) | Jeffreys on σ_ε | **No** |
+| M3 | (same names as M0, but link rescales meaning) | Jeffreys on σ_ε + prior mismatch | **No** |
 | M4 | δ (estimate bias) | Flat on ℝ | **No** |
 | M5 | σ_HCAST, σ_SWAA (replace σ_human) | Jeffreys × 2 | **No** |
 | M6 | (lacks σ_global, σ_family from hierarchical models) | — | see below |
@@ -616,21 +623,24 @@ regardless of properness.
 
 ### Well-defined Bayes factors
 
-**BF(M0, M3)** — logistic vs. probit link.
-M0 and M3 have identical parameters (including σ_ε).  All priors cancel.
-The Bayes factor compares only the functional form of the link.
-Defined. ✓
-
 **BF(M_base, M1)** — does per-task discrimination help?
 M_base has no unique parameters.  M1 adds a_i ~ Exponential(1) (proper).
 All shared parameters (hierarchy, observation models, α, β) cancel.
 Defined. ✓
+
+This is the only well-defined Bayes factor with our honest priors.
 
 ### Undefined Bayes factors (and why)
 
 **M0 vs. M1** (residual vs. discrimination): σ_ε in M0 is Jeffreys
 (improper), unique to M0.  We have no honest constraint on E[σ_ε]
 that would make it proper.  Undefined.
+
+**M0 vs. M3** (logistic vs. probit): Although the parameter names are
+identical, the link function changes what the parameters mean.
+logistic(η) ≈ Φ(0.55·η), so the "same prior" on β encodes different
+beliefs about probability-scale effects.  The priors don't actually
+cancel.  Undefined without explicit prior rescaling.
 
 **M0 vs. M6** (hierarchy vs. flat): σ_global and σ_family appear only
 in M0 (and other hierarchical models), both Jeffreys.  Undefined.
@@ -647,20 +657,21 @@ Jeffreys parameter with two.  The priors don't cancel.  Undefined.
 
 ### What this means
 
-The most structurally interesting comparisons — hierarchy vs. flat,
-residual vs. discrimination, slopes vs. scalar ability — are all
-formally undecidable with our honest priors.  This is not a failure of
-the method.  It reflects a genuine epistemic fact: we don't have enough
-prior information about model-specific scale parameters to say how much
-Occam penalty each model deserves.
+The structurally interesting comparisons — hierarchy vs. flat,
+residual vs. discrimination, slopes vs. scalar ability, logistic vs.
+probit — are all formally undecidable with our honest priors.  This is
+not a failure of the method.  It reflects a genuine epistemic fact: we
+don't have enough prior information about model-specific parameters to
+say how much Occam penalty each model deserves.
 
-The two comparisons that ARE defined test narrower questions:
-- Is the logistic link better than probit? (Almost certainly uninformative.)
-- Does adding per-task discrimination to a bare model improve predictions?
+The one comparison that IS defined tests: does adding per-task
+discrimination to a bare hierarchical model improve the marginal
+likelihood?
 
 For the undefined comparisons, we can still:
 - Fit all models and inspect posteriors.
-- Do posterior predictive checks (does the model reproduce observed patterns?).
+- Do posterior predictive checks (does the model reproduce observed
+  patterns?).
 - Report the posteriors honestly and let readers judge qualitatively.
 
 But we should not substitute a different metric (LOO-CV, WAIC, etc.)
@@ -709,14 +720,11 @@ form for our PyMC models.  Options for estimating them:
    all equal to 1) it's impractical — you can't estimate a
    170-dimensional density from MCMC samples.
 
-For **BF(M_base, M1)**: M_base is nested in M1 by setting a_i = 1 for
-all 170 tasks.  In principle Savage-Dickey applies, but estimating the
-joint posterior density at the 170-dimensional point (1, 1, ..., 1)
-is not feasible.  Use bridge sampling instead (fit both models, estimate
-each marginal likelihood separately, take the ratio).
-
-For **BF(M0, M3)**: These are non-nested (different link functions,
-same parameters).  Bridge sampling is the appropriate method.
+For **BF(M_base, M1)** (our only eligible pair): M_base is nested in M1
+by setting a_i = 1 for all 170 tasks.  In principle Savage-Dickey applies,
+but estimating the joint posterior density at the 170-dimensional point
+(1, 1, ..., 1) is not feasible.  Use bridge sampling instead (fit both
+models, estimate each marginal likelihood separately, take the ratio).
 
 ### Interpretation
 

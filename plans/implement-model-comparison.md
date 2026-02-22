@@ -211,7 +211,7 @@ MODEL_REGISTRY: dict[str, ModelSpec] = {
     "M0_hierarchical_residual": ModelSpec(build_M0,     proper_model_priors=False),  # σ_ε: Jeffreys
     "M1_discrimination":        ModelSpec(build_M1,     proper_model_priors=True),   # a_i: Exp(1)
     "M2_both":                  ModelSpec(build_M2,     proper_model_priors=False),  # σ_ε: Jeffreys
-    "M3_probit":                ModelSpec(build_M3,     proper_model_priors=False),  # σ_ε: Jeffreys
+    "M3_probit":                ModelSpec(build_M3,     proper_model_priors=False),  # σ_ε: Jeffreys + prior mismatch
     "M4_estimate_bias":         ModelSpec(build_M4,     proper_model_priors=False),  # δ: flat
     "M5_per_source_sigma":      ModelSpec(build_M5,     proper_model_priors=False),  # σ_HCAST, σ_SWAA: Jeffreys
     "M6_flat":                  ModelSpec(build_M6,     proper_model_priors=False),  # σ_ε: Jeffreys
@@ -219,44 +219,16 @@ MODEL_REGISTRY: dict[str, ModelSpec] = {
 }
 ```
 
-The comparison runner uses `proper_model_priors` to decide which pairs
-are eligible for Bayes factor computation.  A pair (Mi, Mj) has a
-well-defined BF when:
+**BF eligibility rule**: BF(Mi, Mj) is well-defined iff both have
+`proper_model_priors=True`.  This is computed at runtime from the
+registry — no hardcoded model pairs.
 
-1. Both have `proper_model_priors=True`, **or**
-2. They share identical parameters and priors (differ only in functional
-   form, e.g., link function) — encoded via a `shared_params_group` tag.
-
-For case 2, we need a second flag.  Models in the same `shared_params_group`
-have identical parameter sets and priors, differing only in structural
-form (e.g., link function):
-
-```python
-@dataclass
-class ModelSpec:
-    builder: Callable[[HierarchicalData], pm.Model]
-    proper_model_priors: bool
-    shared_params_group: str | None = None  # models in same group have identical params
-
-
-MODEL_REGISTRY: dict[str, ModelSpec] = {
-    "M_base":                   ModelSpec(build_M_base, True,  None),
-    "M0_hierarchical_residual": ModelSpec(build_M0,     False, "hierarchical_residual"),
-    "M1_discrimination":        ModelSpec(build_M1,     True,  None),
-    "M2_both":                  ModelSpec(build_M2,     False, None),
-    "M3_probit":                ModelSpec(build_M3,     False, "hierarchical_residual"),  # same params as M0
-    "M4_estimate_bias":         ModelSpec(build_M4,     False, None),
-    "M5_per_source_sigma":      ModelSpec(build_M5,     False, None),
-    "M6_flat":                  ModelSpec(build_M6,     False, None),
-    "M8_irt":                   ModelSpec(build_M8,     False, None),
-}
-```
-
-**BF eligibility rule**: BF(Mi, Mj) is well-defined iff:
-- `Mi.proper_model_priors and Mj.proper_model_priors`, or
-- `Mi.shared_params_group == Mj.shared_params_group` (and not None)
-
-This is computed at runtime from the registry — no hardcoded model pairs.
+Note: an earlier draft had a `shared_params_group` flag for models
+that differ only in link function (e.g., M0 logistic vs. M3 probit).
+This was wrong — the link function changes the meaning of the linear
+predictor parameters (logistic(η) ≈ Φ(0.55·η)), so "same prior on β"
+encodes different beliefs about probability-scale effects.  The priors
+don't actually cancel.  M3 is BF-ineligible for this reason too.
 
 ### How to add a new model
 
@@ -267,11 +239,9 @@ Adding a model requires exactly two changes in one file (`bayesian_models.py`):
    the model is structurally different.  The only contract is: the model
    must include a `pm.Bernoulli("agent_obs", ...)` observed variable.
 
-2. **Add one entry to `MODEL_REGISTRY`**, setting:
-   - `proper_model_priors=True` if every model-specific parameter has
-     a proper MaxEnt prior derived from honest constraints.
-   - `shared_params_group` if the model has identical parameters to
-     another model (differing only in functional form like link function).
+2. **Add one entry to `MODEL_REGISTRY`**, setting
+   `proper_model_priors=True` if every model-specific parameter has
+   a proper MaxEnt prior derived from honest constraints.
 
 ```python
 # Example: adding a new M9 with per-family discrimination
@@ -309,19 +279,16 @@ def bf_eligible_pairs(
 ) -> list[tuple[str, str]]:
     """Return all (Mi, Mj) pairs with well-defined Bayes factors.
 
-    A pair is eligible iff:
-    - Both have proper_model_priors=True, OR
-    - Both share the same shared_params_group (not None)
+    A pair is eligible iff both have proper_model_priors=True.
     """
     pairs = []
     for i, name_i in enumerate(model_names):
         spec_i = MODEL_REGISTRY[name_i]
+        if not spec_i.proper_model_priors:
+            continue
         for name_j in model_names[i + 1:]:
             spec_j = MODEL_REGISTRY[name_j]
-            if spec_i.proper_model_priors and spec_j.proper_model_priors:
-                pairs.append((name_i, name_j))
-            elif (spec_i.shared_params_group is not None
-                  and spec_i.shared_params_group == spec_j.shared_params_group):
+            if spec_j.proper_model_priors:
                 pairs.append((name_i, name_j))
     return pairs
 
@@ -366,27 +333,12 @@ def compute_bayes_factors(
 
     results = []
     for name_i, name_j in eligible:
-        spec_i = MODEL_REGISTRY[name_i]
-        spec_j = MODEL_REGISTRY[name_j]
-
-        if (spec_i.shared_params_group is not None
-                and spec_i.shared_params_group == spec_j.shared_params_group):
-            # Same parameters, different structure → bridge sampling
-            log10_bf = _bridge_sampling_bf(idatas[name_i], idatas[name_j])
-            reason = f"shared_params_group={spec_i.shared_params_group}"
-            method = "bridge_sampling"
-        else:
-            # Both proper → bridge sampling (or Savage-Dickey if nested)
-            log10_bf = _bridge_sampling_bf(idatas[name_i], idatas[name_j])
-            reason = "both_proper_model_priors"
-            method = "bridge_sampling"
-
+        log10_bf = _bridge_sampling_bf(idatas[name_i], idatas[name_j])
         results.append({
             "model_i": name_i,
             "model_j": name_j,
             "log10_bf": log10_bf,
-            "method": method,
-            "eligible_reason": reason,
+            "method": "bridge_sampling",
         })
 
     return pd.DataFrame(results)
@@ -394,7 +346,7 @@ def compute_bayes_factors(
 
 ### Bridge sampling
 
-For both eligible pairs, we estimate each model's marginal likelihood
+For BF(M_base, M1), we estimate each model's marginal likelihood
 separately via bridge sampling (Gronau et al., 2017), then take the
 ratio.  Bridge sampling estimates log p(data | M) from posterior samples
 using an iterative scheme that constructs an optimal bridge distribution
@@ -406,7 +358,7 @@ Note: M_base is technically nested in M1 (set a_i = 1 for all tasks),
 so the Savage-Dickey density ratio could apply in principle.  But it
 requires estimating the 170-dimensional joint posterior density at
 (1, 1, ..., 1), which is infeasible from MCMC samples.  Bridge sampling
-is the practical method for both pairs.
+is the practical method.
 
 ### What the comparison runner does NOT do
 
@@ -417,9 +369,8 @@ is the practical method for both pairs.
   question rather than confronting it.
 
 - **No Bayes factors for ineligible pairs.**  If a model has
-  `proper_model_priors=False` and isn't in the same `shared_params_group`
-  as its comparison partner, the BF is undefined.  The code reports this
-  explicitly rather than computing a substitute.
+  `proper_model_priors=False`, the BF is undefined.  The code reports
+  this explicitly rather than computing a substitute.
 
 
 ## Module 3: changes to `wrangle/bayesian.py`
@@ -467,7 +418,7 @@ compare_bayesian_models:
     --runs-file data/raw/runs.jsonl
     --output-comparison-file data/wrangled/model_comparison/headline.csv
     --output-summary-file metrics/model_comparison/headline.yaml
-    --models M_base M0_hierarchical_residual M1_discrimination M3_probit
+    --models M_base M0_hierarchical_residual M1_discrimination
     --n-samples ${hierarchical_bayesian.n_samples}
     --n-tune ${hierarchical_bayesian.n_tune}
     --n-chains ${hierarchical_bayesian.n_chains}
@@ -494,11 +445,11 @@ compare_bayesian_models:
     honest MaxEnt priors make them well-defined.
 ```
 
-With `M_base M0 M1 M3`, the eligible BF pairs are:
+With `M_base M0 M1`, the eligible BF pair is:
 - M_base vs M1 (both `proper_model_priors=True`) — does discrimination help?
-- M0 vs M3 (same `shared_params_group`) — logistic vs probit?
 
-Other pairs (e.g., M_base vs M0) are reported as ineligible.
+M0 is included for posterior comparison but has no eligible BF partner
+(σ_ε is Jeffreys).
 
 This stage is independent of `wrangle_hierarchical_bayesian` — they
 can run in parallel.  The comparison stage is expensive (~N× the cost
@@ -529,8 +480,8 @@ not on every pipeline invocation.
 ## Implementation order
 
 1. **`utils/bayesian_models.py`** — `ModelSpec` dataclass, shared
-   components, model builders.  Start with M_base, M0, M1, and M3
-   (the set that yields two defined BF comparisons).  Add remaining
+   components, model builders.  Start with M_base, M0, and M1
+   (the set that yields the one defined BF comparison).  Add remaining
    models as stubs for posterior-only fitting.
 
 2. **`utils/bayesian_comparison.py`** — `bf_eligible_pairs()`,
@@ -551,10 +502,9 @@ not on every pipeline invocation.
 | Model | Parameters | BF-eligible? | Notes |
 |-------|-----------|-------------|-------|
 | M_base | ~80 | Yes (proper) | 170 μ_task + 33×2 α,β + ~5 hyper |
-| M0 | ~250 | Only vs M3 (shared group) | + 170 ε + 1 σ_ε |
+| M0 | ~250 | No (σ_ε: Jeffreys) | + 170 ε + 1 σ_ε |
 | M1 | ~250 | Yes (proper) | + 170 a (Exp(1)) |
-| M3 | ~250 | Only vs M0 (shared group) | Same as M0, probit link |
 
 All are within PyMC/NUTS capacity.  Expect ~5–15 minutes per model
-with 1000 draws × 2 chains on a single CPU.  Running 4 models takes
-~20–60 minutes total.
+with 1000 draws × 2 chains on a single CPU.  Running 3 models takes
+~15–45 minutes total.
