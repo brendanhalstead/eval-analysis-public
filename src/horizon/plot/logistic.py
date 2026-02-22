@@ -649,13 +649,19 @@ def main() -> None:
     parser.add_argument("--runs-file", type=pathlib.Path, required=False)
     parser.add_argument("--release-dates", type=pathlib.Path, required=False)
     parser.add_argument("--script-parameter-group", type=str, required=True)
+    parser.add_argument(
+        "--params-stage",
+        type=str,
+        default="plot_logistic_regression",
+        help="DVC stage name to read params from",
+    )
     args = parser.parse_args()
 
     logging.basicConfig(
         level=args.log_level.upper(),
         format="%(asctime)s - %(levelname)s - %(message)s",
     )
-    params = dvc.api.params_show(stages="plot_logistic_regression", deps=True)
+    params = dvc.api.params_show(stages=args.params_stage, deps=True)
     fig_params = params["figs"]["plot_logistic_regression"][args.script_parameter_group]
 
     agent_summaries = pd.read_csv(args.input_file)

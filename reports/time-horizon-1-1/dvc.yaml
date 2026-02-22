@@ -144,6 +144,32 @@ stages:
       - plots/logistic/${key}.${plot_format}:
           persist: true
       desc: Plot showing horizon growth over time.
+  plot_hierarchical_bayesian:
+    foreach:
+      headline: ${figs.plot_logistic_regression.headline}
+      twitter_headline: ${figs.plot_logistic_regression.twitter_headline}
+    do:
+      cmd: python -m horizon.plot.logistic --input-file data/wrangled/hierarchical_bayesian/headline.csv
+        --runs-file ${item.runs_file} --release-dates ../../data/external/release_dates.yaml
+        --output-file plots/hierarchical_bayesian/${key}.${plot_format} --log-level ${log_level}
+        --script-parameter-group ${key} --params-stage plot_hierarchical_bayesian
+      deps:
+      - ${item.runs_file}
+      - data/wrangled/hierarchical_bayesian/headline.csv
+      - matplotlibrc
+      - ../../data/external/release_dates.yaml
+      - ${code_dir}/horizon/plot/logistic.py
+      - ${code_dir}/horizon/utils/plots.py
+      params:
+      - log_level
+      - plot_format
+      - plots
+      - fig_params/figs.yaml:
+        - figs.plot_logistic_regression.${key}
+      plots:
+      - plots/hierarchical_bayesian/${key}.${plot_format}:
+          persist: true
+      desc: Plot hierarchical Bayesian time horizons using the standard logistic plotter.
   plot_bootstrap_ci:
     matrix:
       fig_name:

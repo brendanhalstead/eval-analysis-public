@@ -3353,3 +3353,281 @@ stages:
       hash: md5
       md5: 0b576020d5b865148cedfcdcf37b4e39
       size: 743
+  plot_hierarchical_bayesian@headline:
+    cmd: python -m horizon.plot.logistic --input-file 
+      data/wrangled/hierarchical_bayesian/headline.csv --runs-file 
+      data/raw/runs.jsonl --release-dates ../../data/external/release_dates.yaml
+      --output-file plots/hierarchical_bayesian/headline.png --log-level INFO 
+      --script-parameter-group headline --params-stage 
+      plot_hierarchical_bayesian
+    deps:
+    - path: ../../data/external/release_dates.yaml
+      hash: md5
+      md5: 47a919cff55fbbd62241a82464ac741a
+      size: 2374
+    - path: ../../src/horizon/plot/logistic.py
+      hash: md5
+      md5: 90e60e922438c88cf1acd25b2eba4dbe
+      size: 24350
+    - path: ../../src/horizon/utils/plots.py
+      hash: md5
+      md5: 00deb4fc0dfb155171937c382ea95f9e
+      size: 11883
+    - path: data/raw/runs.jsonl
+      hash: md5
+      md5: 96633ce4202dc1d93ccfe9268143d203
+      size: 13105640
+    - path: data/wrangled/hierarchical_bayesian/headline.csv
+      hash: md5
+      md5: ae5208764791b6677c293a9a3214fcfa
+      size: 3379
+    - path: matplotlibrc
+      hash: md5
+      md5: a6268afa6b0de2d0f934ff95c60851e4
+      size: 553
+    params:
+      params.yaml:
+        log_level: INFO
+        plot_format: png
+        plots:
+          suptitle_fontsize: 13
+          xlabelpad: 10
+          ylabelpad: 10
+          ax_label_fontsize: 14
+          title_fontsize: 16
+          annotation_fontsize: 14
+          xtick_labelsize: 14
+          ytick_labelsize: 14
+          legend_fontsize: 14
+          task_distribution_styling:
+            hist:
+              edgecolor: '#a6a6a6'
+              color: '#d4d4d4'
+              alpha: 1
+              linewidth: 1
+              zorder: 50
+            grid: &id012
+              which: major
+              linestyle: '-'
+              alpha: 0.2
+              color: grey
+          scatter_styling:
+            error_bar:
+              color: grey
+              fmt: none
+              capsize: 2
+              alpha: 1
+              zorder: 9
+              linewidth: 1.5
+              capthick: 1.5
+            grid: *id012
+            scatter:
+              s: 150
+              edgecolor: black
+              linewidth: 0.5
+              zorder: 10
+          agent_styling:
+            Gemini 3 Pro:
+              lab_color: '#4285F4'
+              marker: p
+              unique_color: '#4285F4'
+            Claude 4 Opus (Inspect):
+              lab_color: '#d97757'
+              marker: '*'
+              unique_color: '#9C5EDA'
+            Claude 4.1 Opus (Inspect):
+              lab_color: '#d97757'
+              marker: h
+              unique_color: '#A86ED9'
+            Claude Opus 4.5 (Inspect):
+              lab_color: '#d97757'
+              marker: '>'
+              unique_color: '#9C5EDA'
+            Claude 3.7 Sonnet (Inspect):
+              lab_color: '#d97757'
+              marker: D
+              unique_color: '#9C5EDA'
+            Claude 3.5 Sonnet (New) (Inspect):
+              lab_color: '#d97757'
+              marker: s
+              unique_color: '#8B4DC9'
+            Claude 3.5 Sonnet (Old) (Inspect):
+              lab_color: '#d97757'
+              marker: ^
+              unique_color: '#9B6BE0'
+            Claude 3 Opus (Inspect):
+              lab_color: '#d97757'
+              marker: o
+              unique_color: '#B594E8'
+            o3 (Inspect):
+              lab_color: '#18a683'
+              marker: '*'
+              unique_color: '#42AB42'
+            GPT-5 (Inspect):
+              lab_color: '#18a683'
+              marker: p
+              unique_color: '#5AB2FA'
+            GPT-5.1-Codex-Max (Inspect):
+              lab_color: '#18a683'
+              marker: '>'
+              unique_color: '#5AB2FA'
+            GPT-5.2:
+              lab_color: '#18a683'
+              marker: o
+              unique_color: '#4AA0E8'
+            o1 (Inspect):
+              lab_color: '#18a683'
+              marker: P
+              unique_color: '#228B22'
+            o1-preview (Inspect):
+              lab_color: '#18a683'
+              marker: X
+              unique_color: '#3CB371'
+            GPT-4o (Inspect):
+              lab_color: '#18a683'
+              marker: d
+              unique_color: '#2B8FB0'
+            GPT-4 Turbo (Inspect):
+              lab_color: '#18a683'
+              marker: v
+              unique_color: '#4A9CBD'
+            GPT-4 1106 (Inspect):
+              lab_color: '#18a683'
+              marker: D
+              unique_color: '#87CEEB'
+            gpt-3.5-turbo-instruct (Inspect):
+              lab_color: '#18a683'
+              marker: ^
+              unique_color: '#CCE6FF'
+            davinci-002 (GPT-3) (Inspect):
+              lab_color: '#18a683'
+              marker: o
+              unique_color: '#B3E0FF'
+            GPT-2 (Inspect):
+              lab_color: '#18a683'
+              marker: '*'
+              unique_color: '#CCE6FF'
+            GPT-2:
+              lab_color: '#18a683'
+              marker: '*'
+              unique_color: '#CCE6FF'
+            o1-preview:
+              lab_color: '#18a683'
+              marker: D
+              unique_color: '#42AB42'
+            GPT-4 0314:
+              lab_color: '#18a683'
+              marker: '*'
+              unique_color: '#2B8FB0'
+            human:
+              lab_color: grey
+              marker: o
+              unique_color: '#858585'
+            best human for each task:
+              lab_color: gold
+              marker: o
+              unique_color: '#FFD700'
+            default:
+              lab_color: black
+              marker: o
+              unique_color: black
+          performance_over_time_trendline_styling:
+            exponential:
+              line:
+                color: blue
+                alpha: 0.5
+                linewidth: 2
+          legend_order:
+          - Claude Opus 4.5 (Inspect)
+          - Claude 4 Opus (Inspect)
+          - Claude 4.1 Opus (Inspect)
+          - Gemini 3 Pro
+          - Claude 3.7 Sonnet (Inspect)
+          - Claude 3.5 Sonnet (New) (Inspect)
+          - Claude 3.5 Sonnet (Old) (Inspect)
+          - Claude 3 Opus (Inspect)
+          - GPT-4 1106 (Inspect)
+          - GPT-4o (Inspect)
+          - o1-preview
+          - GPT-4 0314
+          - GPT-4 Turbo (Inspect)
+          - GPT-2
+          - o3 (Inspect)
+          - o1 (Inspect)
+          - GPT-5 (Inspect)
+          - GPT-5.1-Codex-Max (Inspect)
+          - GPT-5.2
+      fig_params/figs.yaml:
+        figs.plot_logistic_regression.headline:
+          runs_file: data/raw/runs.jsonl
+          weighting: invsqrt_task_weight
+          categories: ftr
+          regularization: 0.1
+          exclude: []
+          success_percents:
+          - 50
+          - 80
+          confidence_level: 0.95
+          trendlines:
+          - fit_type: exponential
+            caption:
+            after_date: '2023-01-01'
+            color: blue
+            line_start_date: '2022-01-01'
+            line_end_date: '2027-06-01'
+            display_r_squared: true
+            styling:
+            data_file:
+            skip_annotation: false
+          include_task_distribution: none
+          individual_labels: true
+          x_lim_start: '2022-11-01'
+          x_lim_end: '2026-07-01'
+          lower_y_lim: 0.0083333
+          upper_y_lim: 1920
+          linear_overrides:
+            show_minor_xticks: false
+            lower_y_lim: 0
+            plot_style_overrides:
+              scatter_styling:
+                error_bar:
+                  alpha: 0.5
+                  capsize: 0
+          exclude_agents:
+          - Claude 3 Opus (Inspect)
+          - GPT-4 Turbo (Inspect)
+          - Claude 4 Opus (Inspect)
+          - GPT-5.1-Codex-Max (Inspect)
+          - Claude 4.1 Opus (Inspect)
+          exclude_agents_from_all_fits: []
+          title: Length of tasks AI agents have been able to complete 
+            autonomously
+          subtitle: for 228 software engineering, cybersecurity, general 
+            reasoning, and ML tasks
+          rename_legend_labels:
+            davinci-002 (GPT-3) (Inspect): GPT 3
+            gpt-3.5-turbo-instruct (Inspect): GPT 3.5
+            GPT-4o (Inspect): GPT 4o
+            GPT-4 0314: GPT-4
+            o1-preview: o1-preview
+            Claude 4 Opus (Inspect): Claude Opus 4
+            Claude 3.7 Sonnet (Inspect): Sonnet 3.7
+            Claude 3.5 Sonnet (New) (Inspect): Sonnet 3.6
+            Claude 3.5 Sonnet (Old) (Inspect): Sonnet 3.5
+            Claude 3 Opus (Inspect): Claude Opus 3
+            o3 (Inspect): o3
+            o1 (Inspect): o1
+            o1-preview (Inspect): o1 preview
+            GPT-5 (Inspect): GPT 5
+            GPT-4 Turbo (Inspect): GPT 4 Turbo
+            GPT-4 1106 (Inspect): GPT 4 Nov '23
+            GPT-2 (Inspect): GPT 2
+            GPT-5.1-Codex-Max (Inspect): GPT-5.1-Codex-Max
+            Claude Opus 4.5 (Inspect): Claude Opus 4.5
+            GPT-5.2: GPT-5.2 (high)
+          show_y_label: true
+    outs:
+    - path: plots/hierarchical_bayesian/headline.png
+      hash: md5
+      md5: c8676c8f55448a93df30efb016874ef4
+      size: 184360
