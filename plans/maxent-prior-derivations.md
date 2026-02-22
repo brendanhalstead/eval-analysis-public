@@ -57,165 +57,168 @@ parameter.  The marginal likelihood will automatically penalize the model
 for spreading prior mass over a parameter space that the data don't reward.
 
 
+Each constraint below is tagged with its provenance:
+
+- **[structural]**: Follows from the parameter's definition (sign, support,
+  symmetry).  Unchallengeable.
+- **[order-of-magnitude]**: Rough physical reasoning that doesn't require
+  seeing this dataset.  Defensible but imprecise.
+- **[external]**: Claimed to come from outside this dataset.  Source cited;
+  you can check it.
+- **[this dataset]**: Computed from the data we're modeling.  Using it in
+  the prior is double-counting.  Must be replaced with a weaker constraint
+  or Jeffreys prior.
+
+
 ### σ_human (human observation noise)
 
-**What we know**: Scale parameter, σ > 0.  The empirical pooled SD of
-log₂(duration) across tasks is ~0.97 (computed in `multiverse_boxplot.py`).
-So we have a fairly good point estimate.
+**What we know**: Scale parameter, σ > 0 **[structural]**.
 
-**Constraint**: E[σ_human] ≈ 1.0.
+The empirical pooled SD is ~0.97 in log₂ space (from
+`multiverse_boxplot.py`).  But that's computed from this dataset —
+**[this dataset]**.  We cannot use it to set E[σ_human] without
+double-counting.
 
-**MaxEnt (one constraint)**: Exponential(1).
-Mode = 0, mean = 1, heavy right tail.
+Can we get an external constraint?  We'd need published data on human
+timing variability for comparable cognitive tasks (multi-hour software
+engineering challenges timed in a controlled setting).  We don't have a
+citation for this.  If such a study exists, its SD estimate could be used.
+Until then, we can't honestly claim to know E[σ_human].
 
-**Current**: HalfNormal(1.5), with E[σ] ≈ 1.20.
+**Honest prior**: Jeffreys p(σ) ∝ 1/σ **[structural]**.  Improper, but
+with 539 human runs the posterior is well-identified.
 
-With 539 successful human runs, the posterior on σ_human will be tightly
-concentrated regardless of the prior.  But for intellectual honesty: we
-know the mean of this scale, not its variance, so Exponential is the right
-form.
+**If you're uncomfortable with improper priors**: Use a very weakly
+informative proper prior like Exponential(1/5) (E[σ] = 5, covering
+everything from near-zero to absurdly high noise).  This puts negligible
+prior mass where the posterior will concentrate (~1) but keeps the prior
+proper.  Call this what it is: a computational convenience, not a
+knowledge claim.
 
-**Alternative**: If you're comfortable claiming E[σ] ≈ 1 AND E[σ²] ≈ 1.5
-(i.e., you also know the second moment), then Gamma(shape, rate) with
-those moments: shape = E²/Var = 1/(1.5 - 1) = 2, rate = E/Var = 1/0.5 = 2
-→ Gamma(2, 2).  This concentrates mass around 1 with less tail than
-Exponential.  Only use if you can defend the second-moment claim.
+**Current**: HalfNormal(1.5).  The effective E[σ] ≈ 1.20 is suspiciously
+close to the empirical 0.97.  It's not clear whether the original author
+peeked or got lucky.
 
 
 ### σ_estimate (expert estimate noise)
 
-**What we know**: Scale parameter, σ > 0.  Expert estimates are noisier than
-actual run times.  Alexander Barry (METR) reports "only 60% of estimates
-were within a factor of 3" of baseline times.  A factor of 3 in minutes is
-log₂(3) ≈ 1.58 in log₂ space.  For a Normal, 60% within 1.58 SDs means
-σ ≈ 1.58/0.84 ≈ 1.88.  Call it E[σ_estimate] ≈ 2.
+**What we know**: Scale parameter, σ > 0 **[structural]**.  Expert estimates
+are noisier than actual run times **[order-of-magnitude]** — people are
+bad at estimating how long things take, and these are estimates for novel
+tasks, not familiar routines.
 
-**MaxEnt**: Exponential(1/2).
+Alexander Barry (METR statistician) comments on the LessWrong post that
+"only 60% of estimates were within a factor of 3" of baseline times
+**[external — source: LessWrong comment on Moss's post]**.  A factor of 3
+in minutes is log₂(3) ≈ 1.58 in log₂ space.  For a Normal, 60% within
+±1.58 SD means σ ≈ 1.58/0.84 ≈ 1.88.
 
-**Current**: HalfNormal(2.5), with E[σ] ≈ 2.0.  The effective mean
-coincidentally matches, but the shape is HalfNormal rather than Exponential.
+**Caveat**: This is a single comment about this specific dataset's
+estimates.  It's *about* this data, derived from comparing estimates to
+baselines *in this dataset*.  Strictly, it's **[this dataset]** laundered
+through external commentary.  If you use it, be upfront about that.
 
+**Honest prior with no data-peeking**: We know σ > 0 and that estimates
+are noisier than run times.  That's it.  Jeffreys p(σ) ∝ 1/σ, or a weak
+Exponential(1/5) as a proper alternative.
 
-### α_a (agent intercept: log-odds at log₂(h) = 0, i.e., h = 1 minute)
+**If you accept the Barry quote as external**: Exponential(1/2) with
+E[σ] = 2.  This is the one-constraint MaxEnt.
 
-**What we know**: Location parameter.  At a 1-minute task, most agents should
-succeed, so α is probably positive.  But how positive?  An agent with 99%
-success at 1 min has α ≈ 4.6.  We're quite uncertain.
-
-**Constraints**: E[α] ≈ 0 (agnostic center), Var[α] = 25 (very wide).
-
-**MaxEnt**: Normal(0, 25).  This IS the current prior.  ✓
-
-(One could argue E[α] should be positive — agents should succeed on trivial
-tasks — but centering at 0 is the conservative "I don't know" choice, and
-with 33 agents' worth of data, the posterior will be data-dominated.)
-
-
-### β_a (agent slope: change in log-odds per doubling of difficulty)
-
-**What we know**: β ≤ 0 (harder tasks have lower success — domain knowledge,
-not a modeling choice).  Rough magnitude: E[β] ≈ -0.5 (each doubling of
-task duration reduces log-odds by ~0.5).
-
-**Case 1 — we know only the sign and mean**:
-
-Constraint: β ≤ 0, E[β] = -0.5.
-
-MaxEnt on (-∞, 0]: p(β) = λ exp(λβ) where λ = -1/E[β] = 2.
-
-This is a **reflected Exponential**: mass concentrated near 0 (shallow
-slopes), exponentially decaying toward very negative β.
-
-Properties: E[β] = -0.5, SD[β] = 0.5, mode = 0.
-
-**Case 2 — we know the sign, mean, AND variance**:
-
-Constraints: β ≤ 0, E[β] = -0.5, Var[β] = 2.25 (SD = 1.5).
-
-MaxEnt: Truncated Normal(-0.5, 1.5, upper=0).  This is the current prior.
-
-**But there's a catch.**  The current code specifies
-`TruncatedNormal(mu=-0.5, sigma=1.5, upper=0)`, where mu and sigma are
-the *pre-truncation* parameters.  After truncating to β ≤ 0, the effective
-moments shift:
-
-    E[β | β ≤ 0] ≈ -1.4   (not -0.5)
-    SD[β | β ≤ 0] ≈ 0.9    (not 1.5)
-
-So the current prior actually encodes a belief that E[β] ≈ -1.4 — steeper
-slopes than intended.  If you meant to encode E[β] = -0.5, the reflected
-Exponential does it exactly.
-
-**Recommendation for model comparison**: Use the reflected Exponential (Case 1).
-It encodes the minimum information — sign constraint + rough mean — and is
-the most conservative choice.  If the data are informative about β (they should
-be, with 33 agents × 170 tasks), the posterior will concentrate regardless.
+**Current**: HalfNormal(2.5), E[σ] ≈ 2.0.
 
 
 ### α_a (agent intercept: log-odds at log₂(h) = 0, i.e., h = 1 minute)
 
-**What we know**: Location parameter.  At a 1-minute task, most agents should
-succeed, so α is probably positive.  But how positive?  An agent with 99%
-success at 1 min has α ≈ 4.6.  We're quite uncertain.
+**What we know**: Location parameter **[structural]**.  At a 1-minute task,
+most agents should succeed, so α is probably positive
+**[order-of-magnitude]**.  But centering at 0 (50/50 on a trivial task)
+is agnostic and defensible **[structural — symmetry argument]**.  We're
+very uncertain about the scale — log-odds could range from -15 to +15.
 
-**Constraints**: E[α] ≈ 0 (agnostic center), Var[α] = 25 (very wide).
+**Constraints**: E[α] = 0 **[structural/symmetry]**, Var[α] = 25
+**[order-of-magnitude — "3σ covers log-odds ±15"]**.
 
 **MaxEnt**: Normal(0, 25).  This IS the current prior.  ✓
 
 
 ### β_a (agent slope: change in log-odds per doubling of difficulty)
 
-**What we know**: β ≤ 0 (harder tasks have lower success — domain knowledge,
-not a modeling choice).  Rough magnitude: E[β] ≈ -0.5 (each doubling of
-task duration reduces log-odds by ~0.5).
+**What we know**: β ≤ 0 — harder tasks have lower success
+**[structural — this is domain knowledge, not a modeling choice]**.
 
-**Case 1 — we know only the sign and mean**:
+Rough magnitude: E[β] ≈ -0.5?  Where does this number come from?  If it
+came from fitting the frequentist model to this data and eyeballing
+slopes, it's **[this dataset]** and can't be used.  If it came from "each
+doubling of difficulty should roughly halve the odds" — that's a specific
+quantitative claim that we have no external basis for.
 
-Constraint: β ≤ 0, E[β] = -0.5.
+**Honest assessment**: We know the sign.  We don't have a defensible
+external estimate of the magnitude.
 
-MaxEnt on (-∞, 0]: p(β) = λ exp(λβ) where λ = -1/E[β] = 2.
+**Case 1 — we know only the sign** (most honest):
 
-This is a **reflected Exponential**: mass concentrated near 0 (shallow
-slopes), exponentially decaying toward very negative β.
+Constraint: β ≤ 0 **[structural]**.
 
-Properties: E[β] = -0.5, SD[β] = 0.5, mode = 0.
+MaxEnt on (-∞, 0] with no moment constraint: the least informative proper
+prior is an Exponential with very small rate (i.e., very large mean
+magnitude), approaching the improper p(β) ∝ 1 on (-∞, 0].  In practice,
+use a reflected Exponential with a weak rate, e.g., λ = 0.2 (E[β] = -5),
+or Jeffreys-like flat on (-∞, 0] if the posterior is well-identified.
 
-**Case 2 — we know the sign, mean, AND variance**:
+With 33 agents × 170 tasks, β is well-identified for each agent.  A
+flat prior on (-∞, 0] is usable.
 
-Constraints: β ≤ 0, E[β] = -0.5, Var[β] = 2.25 (SD = 1.5).
+**Case 2 — we claim to know E[β] ≈ -0.5** (requires justification):
 
-MaxEnt: Truncated Normal(-0.5, 1.5, upper=0).  This is the current prior.
+If you can defend E[β] = -0.5 from outside this dataset, then:
 
-**But there's a catch.**  The current code specifies
-`TruncatedNormal(mu=-0.5, sigma=1.5, upper=0)`, where mu and sigma are
-the *pre-truncation* parameters.  After truncating to β ≤ 0, the effective
-moments shift:
+MaxEnt on (-∞, 0] with E[β] = -0.5: p(β) = 2·exp(2β), the reflected
+Exponential with rate λ = 2.  Properties: E[β] = -0.5, SD[β] = 0.5,
+mode = 0.
+
+**Case 3 — we claim sign, mean, AND variance** (current prior):
+
+The current TruncatedNormal(mu=-0.5, sigma=1.5, upper=0) encodes three
+constraints.  But the mu and sigma are *pre-truncation* parameters.
+After truncation the effective moments shift:
 
     E[β | β ≤ 0] ≈ -1.4   (not -0.5)
     SD[β | β ≤ 0] ≈ 0.9    (not 1.5)
 
-So the current prior actually encodes a belief that E[β] ≈ -1.4 — steeper
-slopes than intended.  If you meant to encode E[β] = -0.5, the reflected
-Exponential does it exactly.
+So the current prior encodes E[β] ≈ -1.4 — steeper slopes than stated.
+This systematically shortens time horizons (T ∝ 1/|β|).
 
-**Recommendation for model comparison**: Use the reflected Exponential (Case 1).
-It encodes the minimum information — sign constraint + rough mean — and is
-the most conservative choice.  If the data are informative about β (they should
-be, with 33 agents × 170 tasks), the posterior will concentrate regardless.
+**Recommendation**: Use flat on (-∞, 0] (Case 1) unless you have a
+genuine external source for E[β].  The data are informative enough.
 
 
 ### Hierarchy-specific scale parameters
 
 These only appear in models that use hierarchical pooling.
 
-**σ_global** (between-family SD): E[σ] ≈ 3 → Exponential(1/3).
-Current HalfNormal(3) has E[σ] ≈ 2.39.
+**σ_global** (between-family SD): Scale, σ > 0 **[structural]**.
+Tasks range from ~1 min to ~10,000 min (log₂ ≈ 0 to 13), so the
+between-family spread is at most ~13 log₂ units **[order-of-magnitude]**.
+That gives us a rough upper bound, not a mean.
 
-**σ_family** (within-family SD): E[σ] ≈ 1.5 → Exponential(1/1.5).
-Current HalfNormal(2) has E[σ] ≈ 1.60.
+Honest prior: Jeffreys p(σ) ∝ 1/σ or weak Exponential(1/5).
+Current HalfNormal(3) has E[σ] ≈ 2.39 — it's unclear where "3" comes from
+beyond seeming reasonable after seeing the data.
 
-**μ_global** (global mean difficulty): E[μ] = 6, Var = 9 → Normal(6, 9).
-Current prior matches.  ✓
+**σ_family** (within-family SD): Same situation.  Jeffreys or weak
+Exponential.  Current HalfNormal(2) has E[σ] ≈ 1.60.
+
+**μ_global** (global mean difficulty): The tasks in this dataset are
+software engineering challenges designed to take between a few minutes
+and many hours **[order-of-magnitude — this is knowable from the task
+design, not from the timing data]**.  The geometric mean of such a range
+is roughly 2^6 = 64 minutes.  We're quite uncertain: SD = 3 in log₂ space
+covers a 500× range at ±3σ.
+
+MaxEnt: Normal(6, 9).  Current prior matches.  ✓ — but note that E[μ] = 6
+is defensible as "rough midpoint of the design range," not from computing
+the actual mean of this dataset's task durations.
 
 These priors should be identical across all models that have them, but
 models without hierarchy (e.g., M6 below) simply don't have these
@@ -237,11 +240,11 @@ P(success) = logistic(η_ai)
 score_ai ~ Bernoulli(P)
 
 ε_i ~ Normal(0, σ_ε)        # AI-specific task residual
-σ_ε ~ Exponential(1/1.5)    # MaxEnt given E[σ_ε] ≈ 1.5
+σ_ε ~ p(σ) ∝ 1/σ           # Jeffreys — no external basis for E[σ_ε]
 ```
 
-This is the current hierarchical model with MaxEnt priors substituted for
-the HalfNormals.  The additive ε_i captures "AI-specific difficulty" — a
+This is the current hierarchical model with honest priors.  The additive
+ε_i captures "AI-specific difficulty" — a
 task that's harder (or easier) for AI than its human time would predict.
 The same ε_i applies to ALL agents.
 
@@ -307,7 +310,7 @@ score_ai ~ Bernoulli(P)
 
 a_i ~ Exponential(1)
 ε_i ~ Normal(0, σ_ε)
-σ_ε ~ Exponential(1/1.5)
+σ_ε ~ p(σ) ∝ 1/σ
 ```
 
 This nests both M0 (when a_i = 1 for all tasks) and M1 (when ε_i = 0 for
@@ -382,8 +385,8 @@ one direction, but the bias is the same for all tasks.
 Replaces the single σ_human with source-specific noise:
 
 ```
-σ_human_HCAST ~ Exponential(1)
-σ_human_SWAA  ~ Exponential(1)
+σ_human_HCAST ~ p(σ) ∝ 1/σ    # Jeffreys
+σ_human_SWAA  ~ p(σ) ∝ 1/σ    # Jeffreys
 
 # HCAST runs:
 log₂(duration_ij) ~ Normal(μ_task_i, σ_human_HCAST)
@@ -392,8 +395,9 @@ log₂(duration_ij) ~ Normal(μ_task_i, σ_human_HCAST)
 log₂(duration_ij) ~ Normal(μ_task_i, σ_human_SWAA)
 ```
 
-**Prior**: Both σ's get Exponential(1) — identical prior, different data
-subsets.  Same MaxEnt argument as σ_human in §1.
+**Prior**: Both σ's get identical Jeffreys priors — same prior, different
+data subsets.  No external knowledge distinguishes HCAST noise from SWAA
+noise a priori.
 
 With 467 HCAST and 235 SWAA runs, both σ's are well-identified.
 
@@ -412,18 +416,18 @@ No family hierarchy.  Each task gets an independent difficulty:
 μ_task_i ~ Normal(6, 9)        # MaxEnt given E = 6, Var = 9
 
 # Human observation model (same as hierarchical)
-σ_human ~ Exponential(1)
+σ_human ~ p(σ) ∝ 1/σ          # Jeffreys
 log₂(duration_ij) ~ Normal(μ_task_i, σ_human)
 
 # Expert estimates (same)
-σ_estimate ~ Exponential(1/2)
+σ_estimate ~ p(σ) ∝ 1/σ       # Jeffreys
 log₂(estimate_i) ~ Normal(μ_task_i, σ_estimate)
 
 # Agent success (same as M0)
 α_a ~ Normal(0, 25)
-β_a ~ ReflectedExponential(2)   [i.e., p(β) = 2·exp(2β), β ≤ 0]
+β_a ~ flat on (-∞, 0]         # Jeffreys-like, sign constraint only
 ε_i ~ Normal(0, σ_ε)
-σ_ε ~ Exponential(1/1.5)
+σ_ε ~ p(σ) ∝ 1/σ
 
 η_ai = α_a + β_a · μ_task_i + ε_i
 score_ai ~ Bernoulli(logistic(η_ai))
@@ -577,51 +581,66 @@ comparison, and bridge sampling for the principled Bayesian comparison
 where prior choice matters.  If the two methods agree, the result is robust.
 
 
-## 5. Where the current priors diverge from MaxEnt
+## 5. Where the current priors diverge from honest MaxEnt
 
-| Parameter | Current | MaxEnt | Difference |
-|-----------|---------|--------|------------|
-| σ_global | HalfNormal(3) | Exponential(1/3) | Shape: HN encodes E[σ²] = 9; Exp doesn't |
-| σ_family | HalfNormal(2) | Exponential(1/2) | Same issue |
-| σ_human | HalfNormal(1.5) | Exponential(1) | HN has E ≈ 1.20, Exp has E = 1.0 |
-| σ_estimate | HalfNormal(2.5) | Exponential(1/2) | HN has E ≈ 2.0, Exp has E = 2.0 (coincidence) |
-| σ_epsilon | HalfNormal(1.5) | Exponential(1/1.5) | Shape differs |
-| β_a | TruncNorm(-0.5, 1.5, ≤0) | Reflected Exp(2) | **Effective E[β] = -1.4 vs. -0.5** |
-| μ_global | Normal(6, 9) | Normal(6, 9) | ✓ Matches |
-| α_a | Normal(0, 25) | Normal(0, 25) | ✓ Matches |
+| Parameter | Current | Honest MaxEnt | Issue |
+|-----------|---------|---------------|-------|
+| σ_human | HalfNormal(1.5) | Jeffreys 1/σ | E ≈ 1.20 is suspiciously close to empirical 0.97 |
+| σ_estimate | HalfNormal(2.5) | Jeffreys 1/σ (or Exp(1/2) if Barry quote accepted) | Barry quote is about this dataset |
+| σ_global | HalfNormal(3) | Jeffreys 1/σ | No external basis for E[σ] ≈ 3 |
+| σ_family | HalfNormal(2) | Jeffreys 1/σ | No external basis for E[σ] ≈ 1.5 |
+| σ_epsilon | HalfNormal(1.5) | Jeffreys 1/σ | No external basis for E[σ] ≈ 1.5 |
+| β_a | TruncNorm(-0.5, 1.5, ≤0) | Flat on (-∞, 0] | **Effective E[β] = -1.4, no external source for any moment** |
+| μ_global | Normal(6, 9) | Normal(6, 9) | ✓ E = 6 defensible from task design range |
+| α_a | Normal(0, 25) | Normal(0, 25) | ✓ Symmetry + order-of-magnitude scale |
 
-The most consequential divergence is **β_a**.  The TruncatedNormal(-0.5, 1.5)
-has effective mean -1.4 after truncation — nearly 3× steeper than the stated
-intent of E[β] = -0.5.  This pulls the prior toward steep slopes, which
-systematically shortens estimated time horizons (since T ∝ 1/|β|).
+The pattern: every scale parameter prior and the slope prior encode
+quantitative claims (specific means or variances) that trace back to
+either this dataset or to nothing at all.  The location parameters
+(μ_global, α_a) are defensible from structural arguments.
 
-The scale parameter divergences (HalfNormal vs. Exponential) are less
-consequential because (a) both are proper and weakly informative, and (b)
-with hundreds of observations, the posterior is data-dominated.  But for the
-model comparison to be "fair" in Jaynes's sense, all competing models should
-use the same (MaxEnt) priors for shared parameters.
+The most consequential divergence is **β_a**.  The TruncatedNormal has
+effective E[β] ≈ -1.4 — but worse than the wrong number is the absence
+of any external justification for picking a number at all.  The honest
+prior is flat on (-∞, 0].
+
+For scale parameters, the practical impact is small (data dominate with
+hundreds of observations), but the intellectual dishonesty accumulates:
+five parameters whose priors were "tuned to seem reasonable" is five
+opportunities for the prior to push the posterior in a direction that
+looks good but isn't warranted.  Jeffreys priors for all five scales
+would be cleaner.
 
 
 ## 6. Summary: the honest Jaynesian recipe
 
-1. **State your constraints explicitly.**  For each parameter, write down what
-   you actually know — sign, rough mean, rough variance, symmetry.  Nothing
-   else.
+1. **For each constraint, write down where you learned it.**  If the source
+   is "I computed it from this dataset" or "it seemed reasonable" or "an LLM
+   told me it was in the literature," drop it.
 
-2. **Derive the MaxEnt distribution from those constraints.**  Don't pick a
-   distribution family and then set its hyperparameters — derive the family
-   from the constraints.
+2. **Classify what remains.**  You'll mostly have: support constraints
+   (σ > 0, β ≤ 0), symmetry arguments (E[α] = 0), and order-of-magnitude
+   reasoning about the design of the experiment (tasks were designed to take
+   minutes to hours → μ_global ≈ 6).
 
-3. **Shared parameters get identical priors across models.**
+3. **Derive the MaxEnt distribution from those constraints.**  For most
+   scale parameters in this problem, you'll end up with Jeffreys (1/σ),
+   because the only honest constraint is σ > 0.  For location parameters
+   with a defensible center and scale, you'll get Normals.
 
-4. **Model-specific parameters get MaxEnt priors from their own constraints.**
-   For discrimination a_i: Exponential(1).  For bias δ: Normal(0, 1) or flat.
+4. **Shared parameters get identical priors across models.**  Parameters
+   with the same physical meaning get the same prior, regardless of what
+   model they appear in.
 
-5. **Compute marginal likelihoods (or LOO-CV) and compare.**  The Bayes factor
+5. **Model-specific parameters get MaxEnt priors from their own constraints.**
+   For discrimination a_i: Exponential(1) (E[a] = 1 is a scale convention,
+   not data-derived).  For bias δ: flat (we don't know the sign or magnitude).
+
+6. **Compute marginal likelihoods (or LOO-CV) and compare.**  The Bayes factor
    is the right summary.  If |log K| < 1, the data don't distinguish the
    models.  Report this honestly — "the data can't tell" is a valid finding.
 
-6. **Do a prior sensitivity check anyway.**  Vary the constraint values (e.g.,
-   E[σ_human] = 0.5 vs. 1.0 vs. 2.0) and check that the Bayes factors are
-   stable.  If they're not, the comparison is prior-dependent and you should
-   say so.
+7. **Do a prior sensitivity check.**  For any constraint you weren't fully
+   sure about, vary it and check that the Bayes factors are stable.  If
+   they're not, the comparison is prior-dependent and you should say so
+   rather than picking the prior that gives the answer you wanted.
