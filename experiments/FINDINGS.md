@@ -68,6 +68,12 @@ The inflation is not specific to one choice of (k, c). Sweeping across 12 true-p
 - **Steeper slopes inflate more.** Higher k means a faster drop in success rate, but regularization penalizes large coefficients more, so the fitted slope falls further short of the true slope.
 - **The real agent parameter range (k ≈ 0.41–0.59, outlined cells) sits in the inflation zone for long-horizon agents.** For agents with true p50 in the 4–16h range and realistic slopes, the typical inflation is +20% to +80%.
 
+To get a sense of the effect size at a glance for a realistic slope, the plot below fixes k=0.5 and sweeps true p50 from 2h to 16h in one-hour increments:
+
+![True vs fitted p50](figures/true_vs_fitted_p50.png)
+
+At 2h the fitted p50 is nearly correct (+3%). By 8h the overestimate reaches +16%, and by 16h it is +31%. The IQR band stays entirely above the diagonal across the full range.
+
 ## Caveats
 
 - **This experiment uses a logistic DGP.** Real agents' success curves may not be logistic-shaped. If the true curve is steeper than a logistic, the interaction with regularization could produce different inflation magnitudes.
