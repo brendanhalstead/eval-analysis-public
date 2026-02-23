@@ -626,6 +626,95 @@ def make_grid_heatmap(tasks, output_path):
     print(f"Saved {output_path}")
 
 
+def make_true_vs_fitted_figure(tasks, output_path):
+    """Log-log plot of true p50 vs fitted p50 for k=0.5, true p50 from 4h to 16h."""
+    K = 0.5
+    N_TRIALS = 50
+    N_RUNS = 20
+    true_p50_hours = np.arange(2, 17)  # 2h to 16h inclusive, 1h increments
+    true_p50_minutes = true_p50_hours * 60
+    centers_log2 = np.log2(true_p50_minutes)
+
+    median_fitted = np.zeros(len(centers_log2))
+    q25_fitted = np.zeros(len(centers_log2))
+    q75_fitted = np.zeros(len(centers_log2))
+
+    for j, c in enumerate(centers_log2):
+        true_fn = lambda x, _c=c: expit(-K * (np.atleast_1d(x) - _c))
+        p50s = []
+        for trial in range(N_TRIALS):
+            rng = np.random.default_rng(42 + trial)
+            outcomes = generate_outcomes(tasks, true_fn, N_RUNS, rng)
+            agent_df = make_synthetic_agent_df(tasks, outcomes)
+            weight_df = compute_sample_weights(agent_df)
+            agent_df = agent_df.join(weight_df)
+            xl = np.log2(agent_df["human_minutes"].values).reshape(-1, 1)
+            yy = agent_df["score_binarized"].values
+            ww = agent_df["invsqrt_task_weight"].values
+            m = logistic_regression(xl, yy, ww, regularization=0.1)
+            p50s.append(np.exp2(get_x_for_quantile(m, 0.5)))
+        p50s = np.array(p50s)
+        median_fitted[j] = np.median(p50s)
+        q25_fitted[j] = np.percentile(p50s, 25)
+        q75_fitted[j] = np.percentile(p50s, 75)
+        bias_pct = (median_fitted[j] - true_p50_minutes[j]) / true_p50_minutes[j] * 100
+        print(f"  True p50={true_p50_hours[j]:>2.0f}h  "
+              f"median fitted={median_fitted[j]/60:.1f}h  bias={bias_pct:+.1f}%")
+
+    # Convert to hours for plotting
+    med_h = median_fitted / 60
+    q25_h = q25_fitted / 60
+    q75_h = q75_fitted / 60
+
+    fig, ax = plt.subplots(figsize=(7, 7))
+
+    # y = x reference line
+    span = np.array([3, 30])
+    ax.plot(span, span, color="black", linestyle="--", linewidth=1, alpha=0.4,
+            label="y = x (no bias)", zorder=1)
+
+    # IQR band
+    ax.fill_between(true_p50_hours, q25_h, q75_h,
+                     alpha=0.18, color="#1f77b4", zorder=2,
+                     label="IQR (25th–75th percentile)")
+
+    # Median fitted
+    ax.plot(true_p50_hours, med_h, "o-", color="#1f77b4", linewidth=2,
+            markersize=6, zorder=4, label="Median fitted p50")
+
+    ax.set_xscale("log")
+    ax.set_yscale("log")
+    ax.set_xlabel("True p50 (hours)", fontsize=13)
+    ax.set_ylabel("Fitted p50 (hours)", fontsize=13)
+
+    # Use hour ticks — thin out x to avoid crowding
+    x_ticks = [2, 4, 6, 8, 10, 12, 14, 16]
+    y_ticks = [2, 3, 4, 5, 6, 7, 8, 10, 12, 14, 16, 20, 25]
+    ax.set_xticks(x_ticks)
+    ax.set_xticklabels([f"{h}h" for h in x_ticks], fontsize=9)
+    ax.set_yticks(y_ticks)
+    ax.set_yticklabels([f"{h}h" for h in y_ticks], fontsize=9)
+    ax.xaxis.set_minor_locator(matplotlib.ticker.NullLocator())
+    ax.yaxis.set_minor_locator(matplotlib.ticker.NullLocator())
+
+    ax.set_xlim(1.8, 18)
+    ax.set_ylim(1.8, 28)
+
+    ax.set_title(
+        f"True vs fitted p50 (logistic DGP, k={K})\n"
+        f"Median over {N_TRIALS} seeds, {N_RUNS} runs/task, "
+        f"v1.1 ({len(tasks)} tasks), λ=0.1",
+        fontsize=10.5, pad=12)
+    ax.legend(loc="upper left", fontsize=9, framealpha=0.9)
+    ax.grid(True, alpha=0.15, zorder=0)
+    ax.set_aspect("equal")
+
+    plt.tight_layout()
+    plt.savefig(output_path, dpi=200, bbox_inches="tight")
+    plt.close()
+    print(f"Saved {output_path}")
+
+
 if __name__ == "__main__":
     tasks = load_v1_1_task_scaffold()
     print(f"Loaded {len(tasks)} tasks from v1.1\n")
@@ -650,3 +739,8 @@ if __name__ == "__main__":
     make_regularization_figure(
         tasks,
         os.path.join(_script_dir, "figures", "regularization_sweep.png"))
+
+    print("\n--- Figure 5: True vs fitted p50 ---")
+    make_true_vs_fitted_figure(
+        tasks,
+        os.path.join(_script_dir, "figures", "true_vs_fitted_p50.png"))
