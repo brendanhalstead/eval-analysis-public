@@ -228,12 +228,13 @@ def make_figure(tasks, output_path):
 
     # Shade the inflation gap
     lo, hi = min(dgp_true_p50, fit_p50), max(dgp_true_p50, fit_p50)
-    ax.axvspan(lo, hi, ymin=0, ymax=0.5 / 1.14,
+    ymax_axes = 0.59 / 1.14  # axes-coord for y=0.5 given ylim=[-0.09, 1.05]
+    ax.axvspan(lo, hi, ymin=0, ymax=ymax_axes,
                alpha=0.10, color="#d62728", zorder=1)
 
     # True p50 marker
     ax.axvline(dgp_true_p50, color="#2ca02c", linestyle="--", linewidth=2,
-               ymax=0.5 / 1.14, zorder=6)
+               ymax=ymax_axes, zorder=6)
     ax.plot(dgp_true_p50, -0.06, "x", color="#2ca02c", markersize=14,
             markeredgewidth=3, zorder=6, clip_on=False)
     ax.annotate(f"True p50: {format_time_label(dgp_true_p50 * 60)}",
@@ -246,7 +247,7 @@ def make_figure(tasks, output_path):
 
     # Fitted p50 marker
     ax.axvline(fit_p50, color="#1f77b4", linestyle="--", linewidth=2,
-               ymax=0.5 / 1.14, zorder=6)
+               ymax=ymax_axes, zorder=6)
     ax.plot(fit_p50, -0.06, "x", color="#1f77b4", markersize=14,
             markeredgewidth=3, zorder=6, clip_on=False)
     ax.annotate(f"Fitted p50: {format_time_label(fit_p50 * 60)}",
@@ -353,10 +354,11 @@ def make_scatter_figure(tasks, outcomes, model, output_path):
     ax.axhline(0.5, linestyle="dotted", alpha=0.3, color="black", zorder=1)
 
     # p50 markers
+    ymax_axes = 0.59 / 1.14  # axes-coord for y=0.5 given ylim=[-0.09, 1.05]
     ax.axvline(dgp_true_p50, color="#2ca02c", linestyle="--", linewidth=1.5,
-               ymax=0.5 / 1.14, zorder=6, alpha=0.7)
+               ymax=ymax_axes, zorder=6, alpha=0.7)
     ax.axvline(fit_p50, color="#1f77b4", linestyle="--", linewidth=1.5,
-               ymax=0.5 / 1.14, zorder=6, alpha=0.7)
+               ymax=ymax_axes, zorder=6, alpha=0.7)
 
     bias_pct = (fit_p50 - dgp_true_p50) / dgp_true_p50 * 100
     ax.annotate(f"True p50\n{format_time_label(dgp_true_p50 * 60)}",
