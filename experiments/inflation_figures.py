@@ -715,6 +715,357 @@ def make_true_vs_fitted_figure(tasks, output_path):
     print(f"Saved {output_path}")
 
 
+def make_extrapolation_figure(tasks, output_path):
+    """How does the fit behave when the TRUE p50 exceeds the max task length?
+
+    Sweeps the true p50 from 4h to 128h (max task in v1.1 is 30h) across a
+    range of slopes k. Records median fitted p50 and median fitted p80 over
+    N_TRIALS seeds. Uses minimal L2 to isolate extrapolation behavior from
+    the slope-shrinkage bias documented in the other figures.
+
+    Why p80 in particular: when true p50 > max task length, every observed
+    task has true success > 50%, so p50 is purely extrapolated. But true p80
+    may still be inside the observed range (true p80 = p50 / 2^(2/k)), so
+    the fit can interpolate to it.
+    """
+    KS = [0.3, 0.5, 0.8, 1.0, 1.5]
+    N_TRIALS = 30
+    N_RUNS = 20
+    REG = 1e-6  # minimal L2 — isolates extrapolation from shrinkage
+
+    max_task_min = float(tasks["human_minutes"].max())
+    max_task_h = max_task_min / 60
+
+    true_p50_hours = np.array([4, 6, 8, 12, 16, 24, 32, 48, 64, 96, 128])
+    true_p50_min = true_p50_hours * 60.0
+    centers_log2 = np.log2(true_p50_min)
+
+    # results[k] = dict of arrays
+    results = {}
+    for K in KS:
+        med_p50 = np.zeros(len(centers_log2))
+        q25_p50 = np.zeros_like(med_p50)
+        q75_p50 = np.zeros_like(med_p50)
+        med_p80 = np.zeros_like(med_p50)
+        q25_p80 = np.zeros_like(med_p50)
+        q75_p80 = np.zeros_like(med_p50)
+        true_p80_min = np.zeros_like(med_p50)
+
+        print(f"  k = {K}")
+        for j, c in enumerate(centers_log2):
+            # logit(0.8) = ln(4) → true p80 = 2^(c − ln(4)/k)
+            true_p80_min[j] = 2 ** (c - np.log(4) / K)
+
+            true_fn = lambda x, _c=c, _k=K: expit(
+                -_k * (np.atleast_1d(x) - _c))
+            p50s, p80s = [], []
+            for trial in range(N_TRIALS):
+                rng = np.random.default_rng(2026 + trial)
+                outcomes = generate_outcomes(tasks, true_fn, N_RUNS, rng)
+                adf = make_synthetic_agent_df(tasks, outcomes)
+                wdf = compute_sample_weights(adf)
+                adf = adf.join(wdf)
+                xl = np.log2(adf["human_minutes"].values).reshape(-1, 1)
+                yy = adf["score_binarized"].values
+                ww = adf["invsqrt_task_weight"].values
+                m = logistic_regression(xl, yy, ww, regularization=REG)
+                p50s.append(np.exp2(get_x_for_quantile(m, 0.5)))
+                p80s.append(np.exp2(get_x_for_quantile(m, 0.8)))
+            p50s = np.array(p50s)
+            p80s = np.array(p80s)
+            med_p50[j] = np.median(p50s)
+            q25_p50[j] = np.percentile(p50s, 25)
+            q75_p50[j] = np.percentile(p50s, 75)
+            med_p80[j] = np.median(p80s)
+            q25_p80[j] = np.percentile(p80s, 25)
+            q75_p80[j] = np.percentile(p80s, 75)
+            bias_p50 = (med_p50[j] - true_p50_min[j]) / true_p50_min[j] * 100
+            bias_p80 = (med_p80[j] - true_p80_min[j]) / true_p80_min[j] * 100
+            beyond = " *" if true_p50_min[j] > max_task_min else "  "
+            print(f"    true p50={true_p50_hours[j]:>3.0f}h{beyond} "
+                  f"fit p50={med_p50[j]/60:>6.1f}h ({bias_p50:>+6.1f}%)  "
+                  f"true p80={true_p80_min[j]/60:>6.2f}h  "
+                  f"fit p80={med_p80[j]/60:>6.2f}h ({bias_p80:>+6.1f}%)")
+
+        results[K] = {
+            "med_p50": med_p50, "q25_p50": q25_p50, "q75_p50": q75_p50,
+            "med_p80": med_p80, "q25_p80": q25_p80, "q75_p80": q75_p80,
+            "true_p80_min": true_p80_min,
+        }
+
+    # --- Figure: two stacked panels (p50 bias and p80 bias) ---
+    fig, (ax_p50, ax_p80) = plt.subplots(2, 1, figsize=(11, 9),
+                                          sharex=True)
+
+    cmap = plt.get_cmap("viridis")
+    k_colors = {K: cmap(i / max(1, len(KS) - 1)) for i, K in enumerate(KS)}
+
+    for K in KS:
+        r = results[K]
+        bias_p50 = (r["med_p50"] - true_p50_min) / true_p50_min * 100
+        iqr_lo_p50 = (r["q25_p50"] - true_p50_min) / true_p50_min * 100
+        iqr_hi_p50 = (r["q75_p50"] - true_p50_min) / true_p50_min * 100
+        bias_p80 = (r["med_p80"] - r["true_p80_min"]) / r["true_p80_min"] * 100
+        iqr_lo_p80 = (r["q25_p80"] - r["true_p80_min"]) / r["true_p80_min"] * 100
+        iqr_hi_p80 = (r["q75_p80"] - r["true_p80_min"]) / r["true_p80_min"] * 100
+
+        c = k_colors[K]
+        ax_p50.fill_between(true_p50_hours, iqr_lo_p50, iqr_hi_p50,
+                            color=c, alpha=0.10, zorder=2)
+        ax_p50.plot(true_p50_hours, bias_p50, "o-", color=c, linewidth=2,
+                    markersize=5, label=f"k = {K}", zorder=4)
+
+        ax_p80.fill_between(true_p50_hours, iqr_lo_p80, iqr_hi_p80,
+                            color=c, alpha=0.10, zorder=2)
+        ax_p80.plot(true_p50_hours, bias_p80, "s-", color=c, linewidth=2,
+                    markersize=5, label=f"k = {K}", zorder=4)
+
+    for ax, qlabel in [(ax_p50, "p50"), (ax_p80, "p80")]:
+        ax.axhline(0, color="black", linewidth=0.8, zorder=3)
+        ax.axvline(max_task_h, color="#444", linestyle=":", linewidth=1.5,
+                   zorder=3, label=f"Max task ({max_task_h:.0f}h)")
+        ax.axvspan(max_task_h, true_p50_hours.max() * 1.2,
+                   color="#888", alpha=0.07, zorder=1)
+        ax.set_xscale("log")
+        ax.set_xticks(true_p50_hours)
+        ax.set_xticklabels([f"{int(h)}h" for h in true_p50_hours], fontsize=9)
+        ax.xaxis.set_minor_locator(matplotlib.ticker.NullLocator())
+        ax.set_ylabel(f"Bias of fitted {qlabel} (%)", fontsize=12)
+        ax.grid(True, which="major", alpha=0.15, zorder=0)
+        ax.legend(loc="best", fontsize=8, framealpha=0.9, ncol=2)
+        ax.set_xlim(true_p50_hours.min() * 0.85, true_p50_hours.max() * 1.15)
+
+    ax_p50.set_title("Bias of fitted p50 (true p50 on x-axis)", fontsize=11)
+    ax_p80.set_title("Bias of fitted p80 (true p50 on x-axis; "
+                     "true p80 = p50 / 2^(2/k))", fontsize=11)
+    ax_p80.set_xlabel("True p50 of DGP (hours)", fontsize=12)
+
+    fig.suptitle(
+        f"Extrapolation past max task length, swept across slope k\n"
+        f"Logistic DGP, v1.1 ({len(tasks)} tasks, max = {max_task_h:.0f}h),  "
+        f"{N_TRIALS} seeds × {N_RUNS} runs/task,  λ={REG:g} (minimal L2)",
+        fontsize=11.5, y=1.0)
+
+    plt.tight_layout()
+    plt.savefig(output_path, dpi=200, bbox_inches="tight")
+    plt.close()
+    print(f"Saved {output_path}")
+
+    return results
+
+
+# ---------------------------------------------------------------------------
+# Alternate DGPs from Barry (METR, 2026-03-20)
+# https://metr.org/notes/2026-03-20-impact-of-modelling-assumptions-on-time-horizon-results/
+#
+# Each builder returns (dgp_fn, true_p80_log2) given a target true p50 in
+# log2(minutes) and a shape parameter k. The fit (METR's logistic regression
+# on log2 minutes) is then compared against this DGP's own true p50 and p80.
+# ---------------------------------------------------------------------------
+
+def _logit(p):
+    return np.log(p / (1 - p))
+
+
+def build_logistic_dgp(true_p50_log2, k):
+    """Standard logistic: P = sigmoid(-k*(log2 t - c)), c = true_p50_log2."""
+    c = true_p50_log2
+    fn = lambda x, _c=c, _k=k: expit(-_k * (np.atleast_1d(x) - _c))
+    true_p80_log2 = c - _logit(0.8) / k
+    return fn, true_p80_log2
+
+
+def build_reliability_ceiling_dgp(true_p50_log2, k, ceiling=0.995):
+    """P = ceiling * sigmoid(-k*(log2 t - c)).
+    True p50 is where P = 0.5, so c is offset slightly from true_p50_log2."""
+    # 0.5 = ceiling * sigmoid(-k*(true_p50_log2 - c))
+    # → sigmoid(...) = 0.5/ceiling → -k*(true_p50_log2 - c) = logit(0.5/ceiling)
+    # → c = true_p50_log2 + logit(0.5/ceiling)/k
+    c = true_p50_log2 + _logit(0.5 / ceiling) / k
+    fn = lambda x, _c=c, _k=k, _cap=ceiling: _cap * expit(
+        -_k * (np.atleast_1d(x) - _c))
+    # 0.8 = ceiling * sigmoid(...) → log2_p80 = c - logit(0.8/ceiling)/k
+    true_p80_log2 = c - _logit(0.8 / ceiling) / k
+    return fn, true_p80_log2
+
+
+def build_cauchy_dgp(true_p50_log2, k):
+    """P = 0.5 + (1/π)*arctan(-k*(log2 t - c)). True p50 at c."""
+    c = true_p50_log2
+    fn = lambda x, _c=c, _k=k: 0.5 + (1.0 / np.pi) * np.arctan(
+        -_k * (np.atleast_1d(x) - _c))
+    # 0.8 = 0.5 + (1/π)*arctan(-k*(p80 - c)) → arctan(...) = 0.3π
+    # → -k*(p80 - c) = tan(0.3π) → p80 = c - tan(0.3π)/k
+    true_p80_log2 = c - np.tan(0.3 * np.pi) / k
+    return fn, true_p80_log2
+
+
+def build_weibull_survival_dgp(true_p50_log2, k):
+    """P(success | log2 t) = exp(-exp(k*(log2 t - τ))) — Gumbel CDF in log2(t),
+    equivalent to a Weibull survival function in raw t (k = β·ln 2).
+
+    Cumulative-failure form: 1−S(t) = 1−exp(−(t/λ)^β). Strictly decreasing in t,
+    asymmetric (long left shoulder, short right tail in log-space).
+    True p50 at τ - ln(ln 2)/k = τ + 0.367/k.
+    """
+    # 0.5 = exp(-exp(k*(true_p50_log2 - τ)))
+    # → exp(k*(true_p50_log2 - τ)) = ln 2
+    # → τ = true_p50_log2 - ln(ln 2)/k
+    tau = true_p50_log2 - np.log(np.log(2)) / k
+    fn = lambda x, _t=tau, _k=k: np.exp(
+        -np.exp(_k * (np.atleast_1d(x) - _t)))
+    # 0.8 = exp(-exp(k*(p80 - τ))) → exp(k*(p80 - τ)) = -ln 0.8
+    # → p80 = τ + ln(-ln 0.8)/k
+    true_p80_log2 = tau + np.log(-np.log(0.8)) / k
+    return fn, true_p80_log2
+
+
+ALT_DGPS = [
+    ("Logistic (baseline)", build_logistic_dgp, "#1f77b4"),
+    ("Reliability ceiling 0.995", build_reliability_ceiling_dgp, "#ff7f0e"),
+    ("Cauchy sigmoid", build_cauchy_dgp, "#2ca02c"),
+    ("Weibull survival (log-Gumbel)", build_weibull_survival_dgp, "#d62728"),
+]
+
+
+def make_alt_dgp_extrapolation_figure(tasks, output_path):
+    """Test misspecification: generate from alt DGPs, fit METR's logistic.
+
+    For each alternate data-generating process from Barry's analysis, sweep
+    the DGP's true p50 from 4h to 128h (well past the 30h max task length)
+    and report the bias of the fitted p50 and p80 against the DGP's OWN
+    true quantiles. Uses minimal L2 (λ=1e-6) so any bias here is from
+    model misspecification, not slope-shrinkage.
+    """
+    K = 0.5
+    N_TRIALS = 30
+    N_RUNS = 20
+    REG = 1e-6
+
+    max_task_min = float(tasks["human_minutes"].max())
+    max_task_h = max_task_min / 60
+
+    true_p50_hours = np.array([4, 6, 8, 12, 16, 24, 32, 48, 64, 96, 128])
+    true_p50_min = true_p50_hours * 60.0
+    centers_log2 = np.log2(true_p50_min)
+
+    results = {}
+    for name, builder, color in ALT_DGPS:
+        print(f"  DGP: {name}")
+        med_p50 = np.zeros(len(centers_log2))
+        q25_p50 = np.zeros_like(med_p50)
+        q75_p50 = np.zeros_like(med_p50)
+        med_p80 = np.zeros_like(med_p50)
+        q25_p80 = np.zeros_like(med_p50)
+        q75_p80 = np.zeros_like(med_p50)
+        true_p80_min_arr = np.zeros_like(med_p50)
+
+        for j, c_log2 in enumerate(centers_log2):
+            dgp_fn, true_p80_log2 = builder(c_log2, K)
+            true_p80_min_arr[j] = 2 ** true_p80_log2
+
+            p50s, p80s = [], []
+            for trial in range(N_TRIALS):
+                rng = np.random.default_rng(2026 + trial)
+                outcomes = generate_outcomes(tasks, dgp_fn, N_RUNS, rng)
+                adf = make_synthetic_agent_df(tasks, outcomes)
+                wdf = compute_sample_weights(adf)
+                adf = adf.join(wdf)
+                xl = np.log2(adf["human_minutes"].values).reshape(-1, 1)
+                yy = adf["score_binarized"].values
+                ww = adf["invsqrt_task_weight"].values
+                m = logistic_regression(xl, yy, ww, regularization=REG)
+                p50s.append(np.exp2(get_x_for_quantile(m, 0.5)))
+                p80s.append(np.exp2(get_x_for_quantile(m, 0.8)))
+            p50s = np.array(p50s)
+            p80s = np.array(p80s)
+            med_p50[j] = np.median(p50s)
+            q25_p50[j] = np.percentile(p50s, 25)
+            q75_p50[j] = np.percentile(p50s, 75)
+            med_p80[j] = np.median(p80s)
+            q25_p80[j] = np.percentile(p80s, 25)
+            q75_p80[j] = np.percentile(p80s, 75)
+            bias_p50 = (med_p50[j] - true_p50_min[j]) / true_p50_min[j] * 100
+            bias_p80 = (med_p80[j] - true_p80_min_arr[j]) / true_p80_min_arr[j] * 100
+            beyond = " *" if true_p50_min[j] > max_task_min else "  "
+            print(f"    true p50={true_p50_hours[j]:>3.0f}h{beyond} "
+                  f"fit p50={med_p50[j]/60:>6.1f}h ({bias_p50:>+7.1f}%)  "
+                  f"true p80={true_p80_min_arr[j]/60:>6.2f}h  "
+                  f"fit p80={med_p80[j]/60:>6.2f}h ({bias_p80:>+7.1f}%)")
+
+        results[name] = {
+            "color": color,
+            "true_p80_min": true_p80_min_arr,
+            "med_p50": med_p50, "q25_p50": q25_p50, "q75_p50": q75_p50,
+            "med_p80": med_p80, "q25_p80": q25_p80, "q75_p80": q75_p80,
+        }
+
+    # --- Figure: 2 stacked panels (p50 bias / p80 bias) ---
+    fig, (ax_p50, ax_p80) = plt.subplots(2, 1, figsize=(11, 9), sharex=True)
+
+    for name, _, _ in ALT_DGPS:
+        r = results[name]
+        c = r["color"]
+        bias_p50 = (r["med_p50"] - true_p50_min) / true_p50_min * 100
+        iqr_lo_p50 = (r["q25_p50"] - true_p50_min) / true_p50_min * 100
+        iqr_hi_p50 = (r["q75_p50"] - true_p50_min) / true_p50_min * 100
+        bias_p80 = (r["med_p80"] - r["true_p80_min"]) / r["true_p80_min"] * 100
+        iqr_lo_p80 = (r["q25_p80"] - r["true_p80_min"]) / r["true_p80_min"] * 100
+        iqr_hi_p80 = (r["q75_p80"] - r["true_p80_min"]) / r["true_p80_min"] * 100
+
+        ax_p50.fill_between(true_p50_hours, iqr_lo_p50, iqr_hi_p50,
+                            color=c, alpha=0.10, zorder=2)
+        ax_p50.plot(true_p50_hours, bias_p50, "o-", color=c, linewidth=2,
+                    markersize=5, label=name, zorder=4)
+
+        ax_p80.fill_between(true_p50_hours, iqr_lo_p80, iqr_hi_p80,
+                            color=c, alpha=0.10, zorder=2)
+        ax_p80.plot(true_p50_hours, bias_p80, "s-", color=c, linewidth=2,
+                    markersize=5, label=name, zorder=4)
+
+    for ax, qlabel in [(ax_p50, "p50"), (ax_p80, "p80")]:
+        ax.axhline(0, color="black", linewidth=0.8, zorder=3)
+        ax.axvline(max_task_h, color="#444", linestyle=":", linewidth=1.5,
+                   zorder=3, label=f"Max task ({max_task_h:.0f}h)")
+        ax.axvspan(max_task_h, true_p50_hours.max() * 1.2,
+                   color="#888", alpha=0.07, zorder=1)
+        ax.set_xscale("log")
+        # Symlog y so Cauchy's extreme bias doesn't crush the others
+        ax.set_yscale("symlog", linthresh=10, linscale=0.7)
+        ax.set_xticks(true_p50_hours)
+        ax.set_xticklabels([f"{int(h)}h" for h in true_p50_hours], fontsize=9)
+        ax.xaxis.set_minor_locator(matplotlib.ticker.NullLocator())
+        # Major y ticks: ±0, ±10, ±100, ±1000, ±10000, ±100000
+        yticks = [-10000, -1000, -100, -10, 0, 10, 100, 1000, 10000, 100000]
+        ax.set_yticks(yticks)
+        ax.set_yticklabels([f"{int(t):+d}" if t != 0 else "0"
+                            for t in yticks], fontsize=9)
+        ax.set_ylabel(f"Bias of fitted {qlabel} (%, symlog)", fontsize=12)
+        ax.grid(True, which="major", alpha=0.15, zorder=0)
+        ax.legend(loc="best", fontsize=8, framealpha=0.9)
+        ax.set_xlim(true_p50_hours.min() * 0.85, true_p50_hours.max() * 1.15)
+
+    ax_p50.set_title("Bias of fitted p50 (true p50 of DGP on x-axis)",
+                     fontsize=11)
+    ax_p80.set_title("Bias of fitted p80 (true p80 differs by DGP shape)",
+                     fontsize=11)
+    ax_p80.set_xlabel("True p50 of DGP (hours)", fontsize=12)
+
+    fig.suptitle(
+        f"Misspecification: alt DGPs from Barry (METR 2026-03-20), "
+        f"fitted with METR's logistic\n"
+        f"v1.1 ({len(tasks)} tasks, max = {max_task_h:.0f}h),  k={K},  "
+        f"{N_TRIALS} seeds × {N_RUNS} runs/task,  λ={REG:g} (minimal L2)",
+        fontsize=11.5, y=1.0)
+
+    plt.tight_layout()
+    plt.savefig(output_path, dpi=200, bbox_inches="tight")
+    plt.close()
+    print(f"Saved {output_path}")
+
+    return results
+
+
 if __name__ == "__main__":
     tasks = load_v1_1_task_scaffold()
     print(f"Loaded {len(tasks)} tasks from v1.1\n")
@@ -744,3 +1095,13 @@ if __name__ == "__main__":
     make_true_vs_fitted_figure(
         tasks,
         os.path.join(_script_dir, "figures", "true_vs_fitted_p50.png"))
+
+    print("\n--- Figure 6: Extrapolation past max task length (p50 vs p80) ---")
+    make_extrapolation_figure(
+        tasks,
+        os.path.join(_script_dir, "figures", "extrapolation_p50_vs_p80.png"))
+
+    print("\n--- Figure 7: Alt-DGP misspecification under extrapolation ---")
+    make_alt_dgp_extrapolation_figure(
+        tasks,
+        os.path.join(_script_dir, "figures", "alt_dgp_extrapolation.png"))
